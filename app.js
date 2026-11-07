@@ -1,6 +1,6 @@
-import { petSVG } from './pet.js?v=0.2.0';
+import { petSVG } from './pet.js?v=0.3.0';
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 // ================= 小工具 =================
 const $ = (s, r = document) => r.querySelector(s);
@@ -304,8 +304,12 @@ function sendMessage(text) {
   deliver(m);
 }
 
+const IMG_LINE = /(^|\n)[ \t]*(https:\/\/[^\s<]+?(?:\.(?:png|jpe?g|webp)|blob\.vercel-storage\.com\/[^\s<]+))(?:\?[^\s<]*)?[ \t]*(?=\n|$)/gi;
 function fmtText(t) {
-  return esc(t).replace(/（[^（）\n]{0,200}）/g, (s) => `<span class="act">${s}</span>`);
+  const s = String(t ?? '').replace(/!\[[^\]]*\]\((https:\/\/[^)\s]+)\)/g, '$1');
+  return esc(s)
+    .replace(IMG_LINE, (_, pre, url) => `${pre}<img class="chat-img" src="${url}" alt="" loading="lazy">`)
+    .replace(/（[^（）\n]{0,200}）/g, (x) => `<span class="act">${x}</span>`);
 }
 let miniHead;
 function renderTyping() {
@@ -356,6 +360,8 @@ function renderChat(forceBottom) {
   if (forceBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
 }
 $('#chat-list').addEventListener('click', (e) => {
+  const im = e.target.closest('img.chat-img');
+  if (im) { openChatImage(im.src); return; }
   const b = e.target.closest('[data-retry]');
   if (!b) return;
   const m = chat.pending.find((p) => p.id === b.dataset.retry);
@@ -871,6 +877,14 @@ $('#photos-root').addEventListener('click', (e) => {
 });
 
 // ---- 看大圖 ----
+function openChatImage(src) {
+  viewerIdx = -1;
+  const v = $('#viewer');
+  v.classList.add('open');
+  v.innerHTML = `<div class="vw-top"><button class="vw-btn" data-vw="close" aria-label="關閉">✕</button><span>湛湛傳的圖</span><span style="width:40px"></span></div>
+    <div class="vw-img"><img src="${esc(src)}" alt=""></div>
+    <div class="vw-actions"><button class="btn ghost" data-vw="share-url" data-src="${esc(src)}">存到手機</button></div>`;
+}
 let viewerIdx = -1;
 async function openViewer(i) {
   const it = photos.items[i];
@@ -894,8 +908,8 @@ async function openViewer(i) {
       const res = await papi('GET', `git/blobs/${it.meta}`, { headers: { Accept: 'application/vnd.github.raw' } });
       const m = JSON.parse(await res.text());
       if (viewerIdx !== i) return;
-      const kind = { generate: '生圖', edit: '改圖', upload: '上傳' }[m.kind] || '';
-      $('#vw-info').innerHTML = `${kind ? `<b>${kind}</b>` : ''}${m.model ? `<span class="muted">・${esc(m.model)}</span>` : ''}
+      const kind = { generate: '生圖', edit: '改圖', upload: '上傳', save: '存圖' }[m.kind] || '';
+      $('#vw-info').innerHTML = `${kind ? `<b>${kind}</b>` : ''}${m.model ? `<span class="muted">・${esc(m.model)}</span>` : ''}${m.source ? `<span class="muted">・${esc(m.source)}</span>` : ''}
         ${m.prompt ? `<details><summary>提示詞</summary><p>${esc(m.prompt)}</p></details>` : ''}${m.note ? `<p>${esc(m.note)}</p>` : ''}`;
     } catch { /* 沒有說明檔就算了 */ }
   }
@@ -907,6 +921,14 @@ $('#viewer').addEventListener('click', async (e) => {
   const act = b.dataset.vw;
   const it = photos.items[viewerIdx];
   if (act === 'close') closeViewer();
+  if (act === 'share-url') {
+    try {
+      const blob = await (await fetch(b.dataset.src)).blob();
+      const file = new File([blob], b.dataset.src.split('/').pop().split('?')[0] || 'image.png', { type: blob.type || 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
+      else window.open(b.dataset.src, '_blank');
+    } catch (err) { if (err?.name !== 'AbortError') window.open(b.dataset.src, '_blank'); }
+  }
   if (act === 'prev') openViewer(viewerIdx - 1);
   if (act === 'next') openViewer(viewerIdx + 1);
   if (act === 'share' && it) {
@@ -976,6 +998,60 @@ photoInput.addEventListener('change', async () => {
   loadPhotos();
 });
 
+// ================= 用量 =================
+const usage = { month: '', rows: [], minutes: null, runs: 0, loadedAt: 0, loading: false, err: '' };
+async function loadUsage() {
+  if (!settings.token || usage.loading) return;
+  usage.loading = true;
+  const month = tw().month;
+  try {
+    const r = await gh.getRaw(`home/data/usage/${month}.jsonl`);
+    usage.rows = parseJSONL(r.text || '');
+    // GitHub Actions：把這個月 zhan-chat 每次執行的時間加起來（每次無條件進位成整分鐘，跟 GitHub 計費方式一樣）
+    let minutes = 0, runs = 0;
+    for (let page = 1; page <= 10; page++) {
+      const res = await gh.api('GET', `actions/workflows/zhan-chat.yml/runs?per_page=100&page=${page}&created=${encodeURIComponent(`>=${month}-01`)}`);
+      if (!res.ok) { minutes = null; break; }
+      const list = (await res.json()).workflow_runs || [];
+      for (const run of list) {
+        if (!run.run_started_at || run.status !== 'completed') continue;
+        const ms = new Date(run.updated_at) - new Date(run.run_started_at);
+        minutes += Math.max(1, Math.ceil(ms / 60000));
+        runs++;
+      }
+      if (list.length < 100) break;
+    }
+    usage.minutes = minutes;
+    usage.runs = runs;
+    usage.month = month;
+    usage.err = '';
+    usage.loadedAt = Date.now();
+  } catch (e) { usage.err = e.message; usage.loadedAt = Date.now(); usage.month = month; }
+  usage.loading = false;
+  renderUs();
+}
+const fmtTok = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} 百萬` : n >= 1e4 ? `${(n / 1e4).toFixed(1)} 萬` : `${n}`);
+function usageCard() {
+  if (Date.now() - usage.loadedAt > 5 * 60e3 && !usage.loading) setTimeout(loadUsage, 0);
+  if (!usage.loadedAt || usage.err) return `<div class="card"><h2>這個月的用量</h2><p class="muted">${usage.err ? `讀不到用量：${esc(usage.err)}` : '讀取中…'}</p></div>`;
+  const rows = usage.rows;
+  const sum = (k) => rows.reduce((s, r) => s + (r[k] || 0), 0);
+  const replies = rows.filter((r) => r.ok !== false).length;
+  const inTok = sum('in') + sum('cacheRead') + sum('cacheWrite');
+  const cost = sum('cost');
+  const pct = usage.minutes == null ? 0 : Math.min(100, (usage.minutes / 2000) * 100);
+  return `<div class="card usage">
+    <h2>${monthTitle(usage.month)}的用量</h2>
+    <div class="sum3">
+      <div><div class="k">湛湛回覆</div><div class="v">${replies}<small> 次</small></div></div>
+      <div><div class="k">讀進去</div><div class="v">${fmtTok(inTok)}</div></div>
+      <div><div class="k">寫出來</div><div class="v">${fmtTok(sum('out'))}</div></div>
+    </div>
+    <div class="stat" style="margin-top:14px"><span>Actions</span><div class="bar"><i style="width:${pct}%"></i></div><span class="num">${usage.minutes == null ? '?' : usage.minutes}/2000</span></div>
+    <p class="muted" style="margin:10px 0 0">單位是 token（字數的計算單位）。換算成 API 價格約 US$${cost.toFixed(2)}，但妳用的是訂閱，不會另外收錢，只是讓妳知道用了多少。Actions 是 GitHub 每月免費 2000 分鐘。訂閱還剩多少額度，GitHub 這邊看不到，要到 claude.ai →「設定」→「用量」看。</p>
+  </div>`;
+}
+
 // ================= 我們 =================
 function nextOccurrence(md) {
   const t = tw();
@@ -1008,6 +1084,7 @@ function renderUs() {
       <div class="cd ${d.days === 0 ? 'today' : ''}"><span class="e">${esc(d.e || '💗')}</span>
         <div class="tx">${esc(d.name)}<small>${d.md.replace('-', '/')}${d.tag ? `・${d.tag}` : ''}</small></div>
         <div class="days">${d.days === 0 ? '就是今天' : `${d.days}<small> 天</small>`}</div></div>`).join('')}</div>` : ''}
+    ${settings.token ? usageCard() : ''}
     <div class="card">
       <h2>連線設定</h2>
       <div class="field"><label>GitHub 金鑰（fine-grained token）</label><input id="set-token" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(settings.token)}"></div>
