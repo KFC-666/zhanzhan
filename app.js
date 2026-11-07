@@ -1,5 +1,5 @@
 
-const VERSION = '0.8.0';
+const VERSION = '0.8.1';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -8,8 +8,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.8.0`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.8.0" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.8.1`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.8.1" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -172,7 +172,17 @@ async function pushDoc(k) {
   } catch (e) {
     if (e.status === 409 || e.status === 422) {
       const f = await gh.getFile(DOCS[k].path);
-      store.sha[k] = await gh.put(DOCS[k].path, text, f?.sha, DOCS[k].msg);
+      let out = text;
+      // 別的地方（例如湛湛）也改過：合併，不要整份蓋掉
+      if (f && k === 'calendar') {
+        try {
+          const r = JSON.parse(f.text), l = store.data.calendar;
+          const ids = new Set((l.events || []).map((x) => x.id));
+          store.data.calendar = { ...r, ...l, days: { ...(r.days || {}), ...(l.days || {}) }, period: { ...(r.period || {}), ...(l.period || {}) }, events: [...(l.events || []), ...(r.events || []).filter((x) => !ids.has(x.id))] };
+          out = JSON.stringify(store.data.calendar, null, 1);
+        } catch { /* 合併失敗就用本機的 */ }
+      }
+      store.sha[k] = await gh.put(DOCS[k].path, out, f?.sha, DOCS[k].msg);
     } else { setSync('err', e.message); throw e; }
   }
   store.dirty[k] = false;
@@ -1220,9 +1230,9 @@ function periodInfo() {
   }
   if (!runs.length) return null;
   const starts = runs.map((r) => dayNum(r.start));
-  const gaps = starts.slice(1).map((v, i) => v - starts[i]).filter((g) => g >= 18 && g <= 45).slice(-6);
+  const gaps = starts.slice(1).map((v, i) => v - starts[i]).filter((g) => g >= 18 && g <= 45).slice(-12);
   const cycle = gaps.length ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : 28;
-  const lens = runs.slice(-6).map((r) => dayNum(r.end) - dayNum(r.start) + 1);
+  const lens = runs.slice(-12).map((r) => dayNum(r.end) - dayNum(r.start) + 1);
   const len = Math.max(3, Math.min(8, Math.round(lens.reduce((a, b) => a + b, 0) / lens.length)));
   const today = dayNum(todayStr());
   const lastRun = runs[runs.length - 1];
