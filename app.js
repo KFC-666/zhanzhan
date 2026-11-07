@@ -1,5 +1,5 @@
 
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -8,8 +8,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.7.0`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.7.0" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.8.0`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.8.0" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -1232,7 +1232,13 @@ function periodInfo() {
   const toDate = (n) => new Date(n * 864e5).toISOString().slice(0, 10);
   const predicted = new Set();
   for (let i = 0; i < len; i++) predicted.add(toDate(next + i));
-  return { cycle, len, inPeriod, next: toDate(next), daysToNext: next - today, predicted, gapsKnown: gaps.length };
+  // 排卵日大約在下次月經前 14 天，易孕期是排卵日前 5 天到後 1 天（估算）
+  let ov = next - 14;
+  if (ov + 1 < today) ov += cycle;
+  const fertile = new Set();
+  for (let i = -5; i <= 1; i++) fertile.add(toDate(ov + i));
+  return { cycle, len, inPeriod, next: toDate(next), daysToNext: next - today, predicted, gapsKnown: gaps.length, starts: runs.length,
+    ovulation: toDate(ov), daysToOv: ov - today, fertile, fertileFrom: toDate(ov - 5), fertileTo: toDate(ov + 1) };
 }
 const calEvents = () => (store.data.calendar.events ||= []);
 function renderCal() {
@@ -1251,7 +1257,9 @@ function renderCal() {
     const n = evs.filter((e) => e.date === ds).length;
     const pd = periodDays()[ds] || health.period[ds];
     const pp = !pd && pinfo?.predicted.has(ds);
-    grid += `<button data-cday="${ds}" class="${ds === today ? 'today' : ''} ${sh ? 'has' : ''} ${pd ? 'pd' : ''} ${pp ? 'pp' : ''}" ${sh ? `style="--sc:${sh.c}"` : ''}>
+    const fw = !pd && pinfo?.fertile.has(ds);
+    const ov = pinfo?.ovulation === ds;
+    grid += `<button data-cday="${ds}" class="${ds === today ? 'today' : ''} ${sh ? 'has' : ''} ${pd ? 'pd' : ''} ${pp ? 'pp' : ''} ${fw ? 'fw' : ''} ${ov ? 'ov' : ''}" ${sh ? `style="--sc:${sh.c}"` : ''}>
       <span class="dn">${d}</span>${sh ? `<span class="sh">${sh.l}</span>` : ''}${n ? '<i class="ev-dot"></i>' : ''}${pd ? '<i class="pd-mark"></i>' : ''}</button>`;
   }
   const upcoming = evs.filter((e) => e.date >= today).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))).slice(0, 8);
@@ -1265,7 +1273,8 @@ function renderCal() {
     </div>
     <div class="card period-card"><h2>🩸 生理期</h2>
       ${pinfo ? `<div class="pc-main">${pinfo.inPeriod ? `今天是第 <b>${pinfo.inPeriod}</b> 天` : pinfo.daysToNext <= 0 ? '預計就是這幾天' : `下次預計 <b>${dateLabel(pinfo.next)}</b>，還有 ${pinfo.daysToNext} 天`}</div>
-        <p class="muted">平均週期 ${pinfo.cycle} 天、每次約 ${pinfo.len} 天${pinfo.gapsKnown ? '' : '（資料還不夠，先用 28 天估）'}。虛線框是預測的日子。</p>`
+        <div class="pc-sub">排卵日預估 <b>${dateLabel(pinfo.ovulation)}</b>${pinfo.daysToOv > 0 ? `（${pinfo.daysToOv} 天後）` : pinfo.daysToOv === 0 ? '（今天）' : ''}，易孕期 ${pinfo.fertileFrom.slice(5).replace('-', '/')}–${pinfo.fertileTo.slice(5).replace('-', '/')}</div>
+        <p class="muted">根據 ${pinfo.starts} 次紀錄：平均週期 ${pinfo.cycle} 天、每次約 ${pinfo.len} 天${pinfo.gapsKnown ? '' : '（資料還不夠，先用 28 天估）'}。虛線框是預測的經期，綠色是易孕期。排卵日是估算，不能拿來避孕。</p>`
       : '<p class="muted">還沒有紀錄。點日期，或用下面的「生理期」快速標記。記兩次以上就能預測下一次。</p>'}
     </div>
     <div class="card">
@@ -1447,10 +1456,16 @@ const health = { days: LS.get('zh-health-days', {}), period: {}, cache: LS.get('
 const NO_PERIOD = new Set(['', '無', '没有', 'none', 'null', '0', 'false', 'no', '否', '未指定']);
 function rebuildHealthPeriod() {
   health.period = {};
-  for (const [d, v] of Object.entries(health.days)) {
+  const dates = Object.keys(health.days).sort();
+  for (const d of dates) {
+    const v = health.days[d];
     const p = String(v.period ?? '').trim().toLowerCase();
     if (!NO_PERIOD.has(p)) health.period[d] = true;
   }
+  // 捷徑順便傳來的「過去一年經期日期」（period_days），用最新一份
+  const latest = dates.length ? health.days[dates[dates.length - 1]] : null;
+  const list = String(latest?.period_days ?? '').match(/\d{4}-\d{2}-\d{2}/g) || [];
+  for (const d of list) health.period[d] = true;
 }
 rebuildHealthPeriod();
 async function loadHealth() {

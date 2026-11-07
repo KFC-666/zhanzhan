@@ -390,3 +390,8 @@ body.kb .tabbar { display: none; }
 .hc { background: var(--card-2); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; }
 .hc span { font-size: 12px; color: var(--text-2); }
 .hc b { font-size: 15px; word-break: break-word; }
+
+.cal-big button.fw { background: color-mix(in srgb, #7fb08a 18%, var(--card-2)); }
+.cal-big button.ov::after { content: ""; position: absolute; top: 5px; left: 5px; width: 6px; height: 6px; border-radius: 50%; background: #5f9e6e; }
+.period-card .pc-sub { font-size: 14px; margin-bottom: 4px; }
+.period-card .pc-sub b { color: #4f8a5e; }
