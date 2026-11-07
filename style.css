@@ -94,7 +94,7 @@ main { flex: 1; position: relative; overflow: hidden; }
 /* ---------- tab bar ---------- */
 .tabbar {
   flex: none;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   padding: 6px 4px calc(env(safe-area-inset-bottom) + 6px);
   background: var(--card);
   border-top: 1px solid var(--line);
@@ -312,3 +312,27 @@ main { flex: 1; position: relative; overflow: hidden; }
 }
 .toast.show { opacity: .92; transform: translateX(-50%); }
 body.kb .tabbar { display: none; }
+
+/* ---------- photos ---------- */
+.icon-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--text-2); }
+.icon-btn svg { width: 22px; height: 22px; }
+.ph-month { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; margin: 6px 2px 8px; }
+.ph-month span { font-weight: 400; font-size: 12.5px; color: var(--text-2); }
+.ph-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 16px; }
+.ph { aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--card-2); position: relative; }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .3s; }
+.ph img.ok { opacity: 1; }
+.ph img.bad { opacity: 0; }
+.viewer { position: fixed; inset: 0; z-index: 30; background: rgba(20, 12, 15, .96); color: #f6eef0; display: none; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+.viewer.open { display: flex; }
+.vw-top { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font-size: 14px; }
+.vw-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, .12); color: #fff; font-size: 20px; display: grid; place-items: center; }
+.vw-btn:disabled { opacity: .25; }
+.vw-img { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 8px; }
+.vw-img img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.vw-info { padding: 8px 16px; font-size: 13.5px; max-height: 28vh; overflow-y: auto; }
+.vw-info .muted { color: #c9b3b9; }
+.vw-info summary { cursor: pointer; color: #e8b9c4; margin-top: 4px; }
+.vw-info p { margin: 6px 0 0; line-height: 1.5; color: #e9dde0; }
+.vw-actions { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 16px 12px; }
+.vw-actions .btn.danger { color: #ff9aa8; }

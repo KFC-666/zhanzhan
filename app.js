@@ -1,6 +1,6 @@
-import { petSVG } from './pet.js';
+import { petSVG } from './pet.js?v=0.2.0';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 // ================= 小工具 =================
 const $ = (s, r = document) => r.querySelector(s);
@@ -48,7 +48,7 @@ function shiftMonth(key, delta) {
 const monthTitle = (key) => { const [y, m] = key.split('-').map(Number); return `${y} 年 ${m} 月`; };
 
 // ================= 設定 =================
-const settings = Object.assign({ token: '', repo: 'KFC-666/xiaotang-space', branch: 'master' }, LS.get('zh-settings', {}));
+const settings = Object.assign({ token: '', repo: 'KFC-666/xiaotang-space', branch: 'master', photoRepo: 'KFC-666/zhanzhan-photos', photoBranch: 'main' }, LS.get('zh-settings', {}));
 const saveSettings = () => LS.set('zh-settings', settings);
 let sync = { state: settings.token ? 'idle' : 'off', msg: settings.token ? '' : '還沒連線' };
 function setSync(state, msg) { sync = { state, msg }; if (currentTab === 'us') renderUs(); }
@@ -171,13 +171,16 @@ async function pushDoc(k) {
 
 // ================= 分頁 =================
 let currentTab = LS.get('zh-tab', 'chat');
-const TITLES = { pet: '小湛', ledger: '記帳', mood: '心情', us: '我們' };
+const TITLES = { pet: '小湛', photos: '相簿', ledger: '記帳', mood: '心情', us: '我們' };
 function renderTopbar() {
   const tb = $('#topbar');
   if (currentTab === 'chat') {
     const st = chatStatus();
     tb.innerHTML = `<div class="avatar">${petSVG({ head: true, face: 'normal' })}</div>
       <div class="who"><h1>湛湛</h1><div class="sub">${esc(st)}</div></div>`;
+  } else if (currentTab === 'photos') {
+    tb.innerHTML = `<h1>相簿</h1><button class="icon-btn" id="photos-refresh" aria-label="重新整理">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>`;
   } else {
     tb.innerHTML = `<h1>${TITLES[currentTab]}</h1>`;
   }
@@ -188,8 +191,11 @@ function switchTab(tab) {
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${tab}`));
   document.querySelectorAll('#tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   renderTopbar();
-  ({ chat: renderChat, pet: renderPet, ledger: renderLedger, mood: renderMood, us: renderUs })[tab]?.(true);
+  ({ chat: renderChat, pet: renderPet, photos: renderPhotos, ledger: renderLedger, mood: renderMood, us: renderUs })[tab]?.(true);
 }
+$('#topbar').addEventListener('click', (e) => {
+  if (e.target.closest('#photos-refresh')) loadPhotos(true);
+});
 $('#tabbar').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-tab]');
   if (b) switchTab(b.dataset.tab);
@@ -754,6 +760,222 @@ function editMoodDay(ds) {
   });
 }
 
+// ================= 相簿（KFC-666/zhanzhan-photos） =================
+const photos = { items: LS.get('zh-photos', []), loadedAt: 0, loading: false, err: '', urls: new Map(), queue: [], active: 0 };
+async function papi(method, path, { body, headers = {} } = {}) {
+  const res = await fetch(`https://api.github.com/repos/${settings.photoRepo}/${path}`, {
+    method,
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${settings.token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 403) throw new GHError(res.status, '讀不到相簿：App 金鑰可能還沒加上 zhanzhan-photos');
+    throw await gh.fail(res);
+  }
+  return res;
+}
+const IMG_RE = /^photos\/.+\.(png|jpe?g|webp)$/i;
+function photoTime(p) {
+  const m = p.path.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : '';
+}
+async function loadPhotos(loud) {
+  if (!settings.token || photos.loading) return;
+  photos.loading = true;
+  if (loud) toast('重新整理中…');
+  try {
+    const res = await papi('GET', `git/trees/${encodeURIComponent(settings.photoBranch)}?recursive=1`);
+    const tree = (await res.json()).tree || [];
+    const json = new Map(tree.filter((t) => t.path.endsWith('.json')).map((t) => [t.path.replace(/\.json$/, ''), t.sha]));
+    photos.items = tree
+      .filter((t) => t.type === 'blob' && IMG_RE.test(t.path))
+      .map((t) => ({ path: t.path, sha: t.sha, meta: json.get(t.path.replace(/\.[^.]+$/, '')) || null, size: t.size }))
+      .sort((a, b) => b.path.split('/').pop().localeCompare(a.path.split('/').pop()));
+    LS.set('zh-photos', photos.items);
+    photos.err = '';
+    photos.loadedAt = Date.now();
+  } catch (e) {
+    photos.err = e.message;
+  }
+  photos.loading = false;
+  renderPhotos();
+}
+// 用 blob 的 sha 當快取鑰匙：同一張圖永遠不會變，下載一次就好。
+async function photoURL(item) {
+  if (photos.urls.has(item.sha)) return photos.urls.get(item.sha);
+  const key = `https://zhanzhan.cache/photo/${item.sha}`;
+  let blob = null;
+  let cache = null;
+  try { cache = await caches.open('zh-photos'); const hit = await cache.match(key); if (hit) blob = await hit.blob(); } catch { /* 不支援快取 */ }
+  if (!blob) {
+    const res = await papi('GET', `git/blobs/${item.sha}`, { headers: { Accept: 'application/vnd.github.raw' } });
+    const type = /\.png$/i.test(item.path) ? 'image/png' : /\.webp$/i.test(item.path) ? 'image/webp' : 'image/jpeg';
+    blob = new Blob([await res.arrayBuffer()], { type });
+    try { await cache?.put(key, new Response(blob)); } catch { /* 空間不夠就算了 */ }
+  }
+  const url = URL.createObjectURL(blob);
+  photos.urls.set(item.sha, url);
+  return url;
+}
+function queuePhoto(img, item) {
+  photos.queue.push([img, item]);
+  pumpPhotos();
+}
+function pumpPhotos() {
+  while (photos.active < 3 && photos.queue.length) {
+    const [img, item] = photos.queue.shift();
+    photos.active++;
+    photoURL(item).then((u) => { img.src = u; img.classList.add('ok'); }).catch(() => img.classList.add('bad'))
+      .finally(() => { photos.active--; pumpPhotos(); });
+  }
+}
+let photoObserver;
+function renderPhotos() {
+  if (currentTab !== 'photos') return;
+  const root = $('#photos-root');
+  if (!settings.token) { root.innerHTML = '<p class="muted" style="text-align:center;margin-top:30%">先到「我們」分頁貼上金鑰。</p>'; return; }
+  if (!photos.loadedAt && !photos.loading) { loadPhotos(); }
+  const groups = {};
+  for (const it of photos.items) (groups[it.path.split('/')[1] || '其他'] ||= []).push(it);
+  root.innerHTML = `
+    ${photos.err ? `<div class="card muted">${esc(photos.err)}</div>` : ''}
+    ${!photos.items.length ? `<p class="muted" style="text-align:center;margin-top:30%">${photos.loading ? '載入中…' : '相簿還是空的。<br>生的圖會自動存進來，也可以按右下角上傳。'}</p>` : ''}
+    ${Object.entries(groups).map(([m, items]) => `
+      <div class="ph-month">${/^\d{4}-\d{2}$/.test(m) ? monthTitle(m) : esc(m)}<span>${items.length} 張</span></div>
+      <div class="ph-grid">${items.map((it) => `<button class="ph" data-sha="${it.sha}"><img alt="" data-sha="${it.sha}"></button>`).join('')}</div>`).join('')}
+    <div style="height:70px"></div>`;
+  photoObserver?.disconnect();
+  photoObserver = new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      if (!en.isIntersecting) continue;
+      photoObserver.unobserve(en.target);
+      const it = photos.items.find((x) => x.sha === en.target.dataset.sha);
+      if (it) queuePhoto(en.target, it);
+    }
+  }, { root: root, rootMargin: '300px' });
+  root.querySelectorAll('img[data-sha]').forEach((img) => {
+    const u = photos.urls.get(img.dataset.sha);
+    if (u) { img.src = u; img.classList.add('ok'); } else photoObserver.observe(img);
+  });
+}
+$('#photos-root').addEventListener('click', (e) => {
+  const b = e.target.closest('.ph');
+  if (b) openViewer(photos.items.findIndex((x) => x.sha === b.dataset.sha));
+});
+
+// ---- 看大圖 ----
+let viewerIdx = -1;
+async function openViewer(i) {
+  const it = photos.items[i];
+  if (!it) return;
+  viewerIdx = i;
+  const v = $('#viewer');
+  v.classList.add('open');
+  v.innerHTML = `
+    <div class="vw-top"><button class="vw-btn" data-vw="close" aria-label="關閉">✕</button><span>${esc(photoTime(it))}</span><span style="width:40px"></span></div>
+    <div class="vw-img"><img id="vw-img" alt=""></div>
+    <div class="vw-info" id="vw-info"></div>
+    <div class="vw-actions">
+      <button class="vw-btn" data-vw="prev" ${i <= 0 ? 'disabled' : ''}>‹</button>
+      <button class="btn ghost" data-vw="share">存到手機</button>
+      <button class="btn danger" data-vw="del">刪除</button>
+      <button class="vw-btn" data-vw="next" ${i >= photos.items.length - 1 ? 'disabled' : ''}>›</button>
+    </div>`;
+  photoURL(it).then((u) => { if (viewerIdx === i) $('#vw-img').src = u; }).catch((e) => toast(e.message));
+  if (it.meta) {
+    try {
+      const res = await papi('GET', `git/blobs/${it.meta}`, { headers: { Accept: 'application/vnd.github.raw' } });
+      const m = JSON.parse(await res.text());
+      if (viewerIdx !== i) return;
+      const kind = { generate: '生圖', edit: '改圖', upload: '上傳' }[m.kind] || '';
+      $('#vw-info').innerHTML = `${kind ? `<b>${kind}</b>` : ''}${m.model ? `<span class="muted">・${esc(m.model)}</span>` : ''}
+        ${m.prompt ? `<details><summary>提示詞</summary><p>${esc(m.prompt)}</p></details>` : ''}${m.note ? `<p>${esc(m.note)}</p>` : ''}`;
+    } catch { /* 沒有說明檔就算了 */ }
+  }
+}
+function closeViewer() { viewerIdx = -1; $('#viewer').classList.remove('open'); $('#viewer').innerHTML = ''; }
+$('#viewer').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-vw]');
+  if (!b) return;
+  const act = b.dataset.vw;
+  const it = photos.items[viewerIdx];
+  if (act === 'close') closeViewer();
+  if (act === 'prev') openViewer(viewerIdx - 1);
+  if (act === 'next') openViewer(viewerIdx + 1);
+  if (act === 'share' && it) {
+    try {
+      const blob = await (await fetch(await photoURL(it))).blob();
+      const file = new File([blob], it.path.split('/').pop(), { type: blob.type });
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
+      else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click(); }
+    } catch (err) { if (err?.name !== 'AbortError') toast('沒辦法存：' + err.message); }
+  }
+  if (act === 'del' && it) {
+    if (!confirm('從相簿刪掉這張？（GitHub 的歷史紀錄裡還找得回來）')) return;
+    try {
+      await papi('DELETE', `contents/${encPath(it.path)}`, { body: { message: '刪除照片', sha: it.sha, branch: settings.photoBranch } });
+      if (it.meta) await papi('DELETE', `contents/${encPath(it.path.replace(/\.[^.]+$/, '.json'))}`, { body: { message: '刪除照片說明', sha: it.meta, branch: settings.photoBranch } }).catch(() => {});
+      photos.items.splice(viewerIdx, 1);
+      LS.set('zh-photos', photos.items);
+      closeViewer(); renderPhotos(); toast('刪掉了');
+    } catch (err) { toast(err.message); }
+  }
+});
+
+// ---- 上傳 ----
+const photoInput = document.createElement('input');
+photoInput.type = 'file';
+photoInput.accept = 'image/*';
+photoInput.multiple = true;
+$('#photos-add').addEventListener('click', () => {
+  if (!settings.token) { toast('先到「我們」分頁貼上金鑰'); return; }
+  photoInput.value = '';
+  photoInput.click();
+});
+async function shrinkImage(file, max = 2560) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
+  } catch { return file; }
+}
+const blobB64 = (blob) => new Promise((resolve, reject) => {
+  const fr = new FileReader();
+  fr.onload = () => resolve(String(fr.result).split(',')[1]);
+  fr.onerror = reject;
+  fr.readAsDataURL(blob);
+});
+photoInput.addEventListener('change', async () => {
+  const files = [...photoInput.files];
+  if (!files.length) return;
+  let done = 0;
+  for (const f of files) {
+    toast(`上傳中 ${done + 1}/${files.length}…`);
+    try {
+      const blob = await shrinkImage(f);
+      const t = tw();
+      const stamp = `${t.date.replace(/-/g, '')}-${String(t.h).padStart(2, '0')}${String(t.mi).padStart(2, '0')}${String(new Date().getSeconds()).padStart(2, '0')}`;
+      const base = `photos/${t.month}/${stamp}-${Math.random().toString(36).slice(2, 6)}`;
+      const content = await blobB64(blob);
+      await papi('PUT', `contents/${encPath(base)}.jpg`, { body: { message: '上傳照片', content, branch: settings.photoBranch } });
+      await papi('PUT', `contents/${encPath(base)}.json`, { body: { message: '上傳照片說明', content: b64enc(JSON.stringify({ kind: 'upload', time: new Date().toISOString(), name: f.name }, null, 1)), branch: settings.photoBranch } });
+      done++;
+    } catch (e) { toast(`有一張沒傳成功：${e.message}`); }
+  }
+  if (done) toast(`傳好 ${done} 張`);
+  loadPhotos();
+});
+
 // ================= 我們 =================
 function nextOccurrence(md) {
   const t = tw();
@@ -793,6 +1015,7 @@ function renderUs() {
         <div class="field"><label>Repo</label><input id="set-repo" value="${esc(settings.repo)}"></div>
         <div class="field"><label>分支</label><input id="set-branch" value="${esc(settings.branch)}"></div>
       </div>
+      <div class="field"><label>相簿 Repo</label><input id="set-photo-repo" value="${esc(settings.photoRepo)}"></div>
       <button class="btn block" id="set-save">儲存並連線</button>
       <p class="sync ${sync.state === 'ok' ? 'ok' : sync.state === 'err' ? 'err' : ''}"><i></i>${esc(sync.msg || '')}</p>
       <button class="btn ghost block" id="set-refresh">重新抓資料</button>
@@ -804,6 +1027,8 @@ $('#us-root').addEventListener('click', async (e) => {
     settings.token = $('#set-token').value.trim();
     settings.repo = $('#set-repo').value.trim() || 'KFC-666/xiaotang-space';
     settings.branch = $('#set-branch').value.trim() || 'master';
+    settings.photoRepo = $('#set-photo-repo').value.trim() || 'KFC-666/zhanzhan-photos';
+    photos.loadedAt = 0;
     saveSettings();
     chat.etag = null; chat.prev = null;
     await syncAll(true);

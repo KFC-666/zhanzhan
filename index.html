@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=0.2.0">
 </head>
 <body>
   <div id="app">
@@ -33,6 +33,7 @@
         </form>
       </section>
       <section class="view" id="view-pet"><div class="scroll" id="pet-root"></div></section>
+      <section class="view" id="view-photos"><div class="scroll" id="photos-root"></div><button class="fab" id="photos-add">＋ 上傳</button></section>
       <section class="view" id="view-ledger"><div class="scroll" id="ledger-root"></div><button class="fab" id="ledger-add">＋ 記一筆</button></section>
       <section class="view" id="view-mood"><div class="scroll" id="mood-root"></div></section>
       <section class="view" id="view-us"><div class="scroll" id="us-root"></div></section>
@@ -40,6 +41,7 @@
     <nav class="tabbar" id="tabbar">
       <button data-tab="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z"/></svg>聊天</button>
       <button data-tab="pet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="13" r="7"/><path d="M6 10c0-4 3-6 6-6s6 2 6 6c-2-1-3-3-3-3-1 2-4 3-9 3z" fill="currentColor"/></svg>小湛</button>
+      <button data-tab="photos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5L20 17"/></svg>相簿</button>
       <button data-tab="ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>記帳</button>
       <button data-tab="mood"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0"/><circle cx="9" cy="10" r=".8" fill="currentColor"/><circle cx="15" cy="10" r=".8" fill="currentColor"/></svg>心情</button>
       <button data-tab="us"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg>我們</button>
@@ -47,7 +49,8 @@
   </div>
   <div class="sheet-backdrop" id="sheet-backdrop"></div>
   <div class="sheet" id="sheet"><div class="grab"></div><div id="sheet-body"></div></div>
+  <div class="viewer" id="viewer"></div>
   <div class="toast" id="toast"></div>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=0.2.0"></script>
 </body>
 </html>
