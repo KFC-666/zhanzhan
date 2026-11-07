@@ -2,7 +2,7 @@
 // 行為 = 時段 + 真實資料（班表、生理期、睡眠、紀念日）+ 需求值 + 隨機 + 每天的小故事（home/data/island/YYYY-MM-DD.json）。
 // 座標都是房間原圖（1536×1024）的像素，畫面依寬度縮放；腳的位置 = (x, y)，y 越大越前面。
 
-const V = '0.9.0';
+const V = '0.9.1';
 const IMG = (n) => `room/${n}.webp?v=${V}`;
 const ROOM_W = 1536;
 const ROOM_H = 1024;
@@ -256,8 +256,25 @@ export function createRoom(root, api) {
       const actMap = { cook: 'cook', soup: 'soup', eat: 'eat', snack: 'snack', sofa: 'phone', phone: 'phone', read: 'read', game: 'game', bed: 'nap', nap: 'nap', bunny: 'bunny', tidy: 'tidy', watch: 'watch', rest: 'rest' };
       if (e.act === 'out' && who.length) { for (const a of who) goOut(a, e.text, 120 + Math.random() * 180, true); return; }
       if (e.act === 'in') { for (const a of who) if (a.out) comeBack(a, e.text); return; }
-      if (['hug', 'talk', 'kiss', 'together', 'pair'].includes(e.act) || who.length === 2) {
-        startPair(e.text, true); return;
+      if (['hug', 'talk', 'kiss', 'together', 'pair'].includes(e.act)) { startPair(e.text, true); return; }
+      if (who.length === 2) {
+        // 兩個人一起做同一件事：各自走到對應的位置
+        const both = {
+          eat: [['eat', { spot: 'table2' }], ['eat', { spot: 'table1' }]],
+          bed: [['read', { sprite: 'zhan-wolfsleep', spot: 'bedSide', bub: '💤' }], ['nap', {}]],
+          nap: [['read', { sprite: 'zhan-wolfsleep', spot: 'bedSide', bub: '💤' }], ['nap', {}]],
+          sofa: [['watch', {}], ['phone', {}]],
+          watch: [['watch', {}], ['phone', {}]],
+          read: [['read', {}], ['phone', {}]],
+          game: [['watch', {}], ['game', {}]],
+          cook: [['cook', {}], ['snack', { spot: 'table1' }]],
+          bunny: [['bunny', {}], ['bunny', { spot: 'penIn' }]],
+        }[e.act];
+        if (!both) { startPair(e.text, true); return; }
+        const sec = 50 + Math.random() * 60;
+        start(zhan, both[0][0], { ...both[0][1], text: e.text, sec, star: true });
+        start(tang, both[1][0], { ...both[1][1], text: e.text, sec, star: true });
+        return;
       }
       for (const a of who) {
         const key = actMap[e.act] && T[a.id][actMap[e.act]] ? actMap[e.act] : 'wander';
@@ -341,7 +358,9 @@ export function createRoom(root, api) {
     for (const a of all) draw(a, now);
     const mm = minOfDay();
     stage.querySelector('.room-night').style.background = mm < 6 * 60 ? 'rgba(25, 20, 60, .28)' : mm >= 22 * 60 ? 'rgba(25, 20, 60, .12)' : 'transparent';
-    statusEl.innerHTML = `<span>湛湛｜${escapeHTML(zhan.out ? '出門中' : zhan.text || '…')}</span><span>小棠｜${escapeHTML(tang.out ? (isWorkDay() ? '上班中' : '出門中') : tang.text || '…')}</span>`;
+    const zt = zhan.out ? '出門中' : zhan.text || '…';
+    const tt = tang.out ? (isWorkDay() ? '上班中' : '出門中') : tang.text || '…';
+    statusEl.innerHTML = zt === tt && !zhan.out ? `<span>${escapeHTML(zt)}</span>` : `<span>湛湛｜${escapeHTML(zt)}</span><span>小棠｜${escapeHTML(tt)}</span>`;
     raf = requestAnimationFrame(frame);
   }
   function step(a, dt) {
