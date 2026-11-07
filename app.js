@@ -1,5 +1,5 @@
 
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -8,8 +8,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.6.0`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.6.0" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.7.0`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.7.0" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -1211,7 +1211,7 @@ const calDays = () => (store.data.calendar.days ||= {});
 const periodDays = () => (store.data.calendar.period ||= {});
 // 生理期：從標記的日子找出每次開始的日期，算平均週期和天數，預測下一次
 function periodInfo() {
-  const set = periodDays();
+  const set = { ...health.period, ...periodDays() };
   const dates = Object.keys(set).filter((d) => set[d]).sort();
   const runs = [];
   for (const d of dates) {
@@ -1249,7 +1249,7 @@ function renderCal() {
     const ds = `${calMonth}-${String(d).padStart(2, '0')}`;
     const sh = shiftOf(days[ds]);
     const n = evs.filter((e) => e.date === ds).length;
-    const pd = periodDays()[ds];
+    const pd = periodDays()[ds] || health.period[ds];
     const pp = !pd && pinfo?.predicted.has(ds);
     grid += `<button data-cday="${ds}" class="${ds === today ? 'today' : ''} ${sh ? 'has' : ''} ${pd ? 'pd' : ''} ${pp ? 'pp' : ''}" ${sh ? `style="--sc:${sh.c}"` : ''}>
       <span class="dn">${d}</span>${sh ? `<span class="sh">${sh.l}</span>` : ''}${n ? '<i class="ev-dot"></i>' : ''}${pd ? '<i class="pd-mark"></i>' : ''}</button>`;
@@ -1361,6 +1361,7 @@ function renderUs() {
         <div class="days">${d.days === 0 ? '就是今天' : `${d.days}<small> 天</small>`}</div></div>`).join('')}</div>` : ''}
     ${settings.token ? pushCard() : ''}
     ${themeCard()}
+    ${settings.token ? healthCard() : ''}
     ${settings.token ? usageCard() : ''}
     <div class="card">
       <h2>連線設定</h2>
@@ -1403,6 +1404,7 @@ async function syncAll(loud) {
   try {
     await Promise.all(Object.keys(DOCS).map((k) => (DOCS[k].readonly ? pullDoc(k) : (store.dirty[k] ? pushDoc(k) : pullDoc(k)))));
     await loadChat();
+    loadHealth();
     if (chat.pending.some((p) => p.st === 'sending' || p.st === 'fail')) {
       chat.pending.filter((p) => p.st === 'sending').forEach((p) => { p.st = 'fail'; p.err = '上次沒送完'; });
       savePending();
@@ -1439,6 +1441,67 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { schedulePoll(200); if (currentTab === 'pet') renderPet(); }
 });
 setInterval(() => { if (currentTab === 'pet') renderPet(); }, 60e3);
+
+// ================= 健康（iPhone 捷徑每天同步到 home/data/health/） =================
+const health = { days: LS.get('zh-health-days', {}), period: {}, cache: LS.get('zh-health-cache', {}), loadedAt: 0, last: '' };
+const NO_PERIOD = new Set(['', '無', '没有', 'none', 'null', '0', 'false', 'no', '否', '未指定']);
+function rebuildHealthPeriod() {
+  health.period = {};
+  for (const [d, v] of Object.entries(health.days)) {
+    const p = String(v.period ?? '').trim().toLowerCase();
+    if (!NO_PERIOD.has(p)) health.period[d] = true;
+  }
+}
+rebuildHealthPeriod();
+async function loadHealth() {
+  if (!settings.token) return;
+  try {
+    const res = await gh.api('GET', `contents/home/data/health?ref=${encodeURIComponent(settings.branch)}`);
+    if (res.status === 404) return;
+    if (!res.ok) return;
+    const list = (await res.json()).filter((f) => f.type === 'file' && f.name.endsWith('.json')).sort((a, b) => a.name.localeCompare(b.name)).slice(-30);
+    for (const f of list) {
+      if (health.cache[f.sha]) continue;
+      const r = await gh.getRaw(f.path);
+      try { health.cache[f.sha] = JSON.parse(r.text || '{}'); } catch { health.cache[f.sha] = {}; }
+    }
+    const days = {};
+    let last = '';
+    for (const f of list) {
+      const d = health.cache[f.sha] || {};
+      const date = String(d.date || f.name.slice(0, 10)).slice(0, 10);
+      days[date] = { ...d, _file: f.name };
+      last = f.name;
+    }
+    // 只留這 30 份的快取
+    const keep = new Set(list.map((f) => f.sha));
+    for (const k of Object.keys(health.cache)) if (!keep.has(k)) delete health.cache[k];
+    health.days = days;
+    health.last = last;
+    health.loadedAt = Date.now();
+    LS.set('zh-health-days', days);
+    LS.set('zh-health-cache', health.cache);
+    rebuildHealthPeriod();
+    if (currentTab === 'us') renderUs();
+    if (currentTab === 'mood') renderMood();
+  } catch { /* 沒網路就用上次的 */ }
+}
+// 捷徑傳來的睡眠時間可能是純數字（分鐘或秒），換成「幾小時幾分」
+function fmtSleep(v) {
+  const n = Number(String(v).replace(/,/g, ''));
+  if (!isFinite(n) || String(v).trim() === '') return v;
+  const min = n <= 24 ? n * 60 : n <= 1440 ? n : n / 60;
+  return `${Math.floor(min / 60)} 小時 ${Math.round(min % 60)} 分`;
+}
+function healthCard() {
+  const dates = Object.keys(health.days).sort();
+  if (!dates.length) return `<div class="card"><h2>健康</h2><p class="muted" style="margin:0">還沒有資料。照 repo 裡 <b>home/health-shortcut.md</b> 做好「同步給湛湛」捷徑，每天會自動傳過來。</p></div>`;
+  const d = health.days[dates[dates.length - 1]];
+  const row = (k, l) => (d[k] !== undefined && String(d[k]).trim() !== '' ? `<div class="hc"><span>${l}</span><b>${esc(k === 'sleep' ? fmtSleep(d[k]) : d[k])}</b></div>` : '');
+  return `<div class="card"><h2>健康 <span class="muted">${dateLabel(dates[dates.length - 1])}</span></h2>
+    <div class="hc-grid">${row('sleep', '睡眠')}${row('steps', '步數')}${row('active', '活動')}${row('resting_hr', '靜止心率')}${row('weight', '體重')}${row('period', '經期')}</div>
+    <p class="muted" style="margin:8px 0 0">每天由 iPhone 捷徑自動同步，我聊天時看得到最近幾天。</p></div>`;
+}
 
 // ================= 推播通知 =================
 const VAPID_PUBLIC = 'BIujlx74-9a-YrAOSo06QgMCh2-uWKT6u8P__veOPKvUFQS7nlcvAPyv57sc_yVKGSYTX5ksBgRGm-3QFVe-hkA';
