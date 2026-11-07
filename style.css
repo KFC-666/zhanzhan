@@ -186,9 +186,9 @@ main { flex: 1; position: relative; overflow: hidden; }
   box-shadow: var(--shadow); font-size: 15px; min-height: 38px; max-width: 90%; position: relative;
 }
 .pet-say::after { content: ""; position: absolute; left: 50%; bottom: -7px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: var(--card); }
-.pet-figure { width: 200px; height: 220px; margin: 10px auto 0; position: relative; }
-.pet-figure svg { width: 100%; height: 100%; animation: bob 3.2s ease-in-out infinite; transform-origin: 50% 100%; }
-.pet-figure.bounce svg { animation: hop .5s ease; }
+.pet-figure { width: 230px; height: 236px; margin: 8px auto 0; position: relative; cursor: pointer; }
+.pet-figure img { width: 100%; height: 100%; object-fit: contain; animation: bob 3.2s ease-in-out infinite; transform-origin: 50% 100%; display: block; }
+.pet-figure.bounce img { animation: hop .5s ease; }
 @keyframes bob { 0%, 100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-3px) scaleY(1.01); } }
 @keyframes hop { 0% { transform: translateY(0); } 40% { transform: translateY(-14px) scaleY(1.03); } 100% { transform: translateY(0); } }
 .pet-figure .blink { animation: blink 4.5s infinite; transform-origin: center; transform-box: fill-box; }
@@ -361,3 +361,27 @@ body.kb .tabbar { display: none; }
 .ev-row { display: flex; gap: 10px; align-items: center; }
 .ev-row b { flex: none; font-size: 13.5px; color: var(--accent-strong); min-width: 44px; }
 .ev-row span { flex: 1; }
+
+/* ---------- 0.5.0 ---------- */
+.head-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.body-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.chat-empty .big { height: 150px; }
+.welcome .big { height: 180px; }
+.chip-btn { font-size: 12.5px; background: var(--card); color: var(--text-2); border-radius: 99px; padding: 2px 10px; margin-left: 6px; box-shadow: var(--shadow); vertical-align: 2px; }
+.pet-stage.night .chip-btn { background: rgba(255,255,255,.15); color: #f3eaf5; box-shadow: none; }
+.wardrobe { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.wardrobe button { background: var(--card-2); border-radius: 16px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; border: 2px solid transparent; font-size: 13px; }
+.wardrobe button.on { border-color: var(--accent); background: var(--accent-soft); }
+.wardrobe img { width: 100%; height: 110px; object-fit: contain; }
+.wardrobe small { color: var(--text-2); font-size: 10.5px; }
+.cal-big button.pd { box-shadow: inset 0 0 0 2px #e0708a; }
+.cal-big button.pp { outline: 1.5px dashed #e0708a; outline-offset: -3px; }
+.cal-big .pd-mark { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: #e0708a; }
+.period-card .pc-main { font-size: 16px; margin-bottom: 4px; }
+.period-card .pc-main b { color: #d9576f; }
+.theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.theme-grid button { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; padding: 6px 0; border-radius: 14px; border: 2px solid transparent; }
+.theme-grid button.on { border-color: var(--accent); background: var(--accent-soft); }
+.theme-grid .sw { width: 40px; height: 40px; border-radius: 50%; position: relative; box-shadow: var(--shadow); overflow: hidden; }
+.theme-grid .sw i { position: absolute; right: 4px; bottom: 4px; width: 12px; height: 12px; border-radius: 50%; }
+.seg { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }

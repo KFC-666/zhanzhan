@@ -1,6 +1,16 @@
-import { petSVG } from './pet.js?v=0.4.0';
 
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
+// 小湛的圖（GPT 畫的，放在 pet/）
+const PET_IMG = {
+  shirt: ['normal', 'happy', 'hungry', 'sad'],
+  wolf: ['normal', 'happy', 'hungry', 'sad', 'sleep'],
+  home: ['normal'],
+  apron: ['normal'],
+  suit: ['normal'],
+};
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.5.0`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.5.0" alt="">`;
+const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
 const $ = (s, r = document) => r.querySelector(s);
@@ -177,7 +187,7 @@ function renderTopbar() {
   const tb = $('#topbar');
   if (currentTab === 'chat') {
     const st = chatStatus();
-    tb.innerHTML = `<div class="avatar">${petSVG({ head: true, face: 'normal' })}</div>
+    tb.innerHTML = `<div class="avatar">${headImg()}</div>
       <div class="who"><h1>湛湛</h1><div class="sub">${esc(st)}</div></div>`;
   } else if (currentTab === 'photos') {
     tb.innerHTML = `<h1>相簿</h1><button class="icon-btn" id="photos-refresh" aria-label="重新整理">
@@ -407,10 +417,10 @@ function renderChat(forceBottom) {
   const sc = $('#chat-scroll');
   const nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 120;
   const list = $('#chat-list');
-  miniHead ||= petSVG({ head: true });
+  miniHead ||= headImg();
   const all = [...chat.log, ...chat.pending.map((p) => ({ ...p, role: 'user', pending: true }))];
   if (!all.length) {
-    list.innerHTML = `<div class="chat-empty"><div class="big">${petSVG({ face: 'happy' })}</div>
+    list.innerHTML = `<div class="chat-empty"><div class="big">${bodyImg('happy')}</div>
       ${settings.token ? '想說什麼就說，我在。' : '還沒連線。到「我們」分頁貼上 GitHub 金鑰，就能跟我說話了。'}</div>`;
     return;
   }
@@ -606,12 +616,27 @@ function petAct(kind, food) {
     setTimeout(() => { if (currentTab === 'pet') renderPet(); }, 2600);
   }
 }
+const OUTFITS = [
+  { k: 'auto', l: '自動', note: '白天襯衫、晚上睡衣', img: 'shirt' },
+  { k: 'shirt', l: '襯衫', img: 'shirt' },
+  { k: 'home', l: '居家服', img: 'home' },
+  { k: 'apron', l: '圍裙', img: 'apron' },
+  { k: 'suit', l: '西裝', img: 'suit' },
+  { k: 'wolf', l: '大灰狼睡衣', img: 'wolf' },
+];
+function petOutfit(night, asleep) {
+  if (asleep) return 'wolf';
+  const o = store.data.pet.outfit || 'auto';
+  if (o === 'auto') return night ? 'wolf' : 'shirt';
+  return PET_IMG[o] ? o : 'shirt';
+}
 function renderPet(first) {
   if (currentTab !== 'pet') return;
   const root = $('#pet-root');
   const s = petNow();
   const t = tw();
   const night = t.h >= 21 || t.h < 7;
+  const outfit = petOutfit(night, s.asleep);
   if (first || !petSay) petSay = idleLine(s);
   const { lv, pct } = petLevel(s.love);
   const log = (store.data.pet.log || []).slice(-5).reverse();
@@ -621,8 +646,8 @@ function renderPet(first) {
         <circle cx="30" cy="30" r="1.5"/><circle cx="80" cy="18" r="1"/><circle cx="250" cy="26" r="1.6"/><circle cx="210" cy="60" r="1"/><circle cx="40" cy="90" r="1"/><circle cx="270" cy="100" r="1.2"/></g>
         <path d="M262 40a14 14 0 1 1-12-22 11 11 0 0 0 12 22z" fill="#f6e7a8"/></svg>
       <div class="pet-say">${fmtText(petSay)}</div>
-      <div class="pet-figure" id="pet-fig">${petSVG({ face: petFace(s), outfit: night ? 'wolf' : 'day' })}</div>
-      <div class="pet-name">小湛 <span class="muted">Lv ${lv}</span></div>
+      <div class="pet-figure" id="pet-fig">${bodyImg(petFace(s), outfit)}</div>
+      <div class="pet-name">小湛 <span class="muted">Lv ${lv}</span> <button class="chip-btn" data-act="wardrobe">👔 換裝</button></div>
     </div>
     <div class="card stats">
       <div class="stat"><span>飽足</span><div class="bar full"><i style="width:${s.full}%"></i></div><span class="num">${s.full}</span></div>
@@ -642,6 +667,23 @@ $('#pet-root').addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]');
   if (b) {
     const act = b.dataset.act;
+    if (act === 'wardrobe') {
+      const cur = store.data.pet.outfit || 'auto';
+      openSheet(`<h3>幫小湛換衣服</h3><div class="wardrobe">${OUTFITS.map((o) => `<button data-outfit="${o.k}" class="${cur === o.k ? 'on' : ''}"><img src="${petSrc(o.img, 'normal')}" alt=""><b>${o.l}</b>${o.note ? `<small>${o.note}</small>` : ''}</button>`).join('')}</div>`, (body) => {
+        body.addEventListener('click', (ev) => {
+          const ob = ev.target.closest('[data-outfit]');
+          if (!ob) return;
+          store.data.pet.outfit = ob.dataset.outfit;
+          saveDoc('pet');
+          closeSheet();
+          petSay = { home: '（拉了拉袖口）這件比較舒服。', apron: '今天想吃什麼？我來煮。', suit: '（整理領帶）好看嗎？', wolf: '……又要我穿這件。（還是乖乖穿上）', shirt: '嗯。', auto: '白天襯衫，晚上睡衣。聽妳的。' }[ob.dataset.outfit] || '嗯。';
+          petFlash = Date.now() + 2500;
+          renderPet();
+          setTimeout(() => { if (currentTab === 'pet') renderPet(); }, 2600);
+        });
+      });
+      return;
+    }
     if (act === 'feed') {
       if (petNow().asleep) { toast('他睡著了，醒來再餵。'); return; }
       openSheet(`<h3>要餵小湛吃什麼？</h3><div class="food-grid">${FOODS.map((f, i) => `<button data-food="${i}"><span class="e">${f.e}</span>${f.name}<small>飽足 +${f.full}</small></button>`).join('')}</div>`, (body) => {
@@ -796,7 +838,7 @@ function renderMood() {
       <div class="mood-pick">${MOODS.map((x) => `<button data-mood="${x.k}" class="${te?.k === x.k ? 'on' : ''}"><span class="e">${x.e}</span>${x.l}</button>`).join('')}</div>
       <div class="field"><textarea id="mood-note" rows="2" placeholder="想寫點什麼也可以（選填）">${esc(te?.note || '')}</textarea></div>
       <button class="btn block" id="mood-save">記下來</button>
-      ${justZ ? `<div class="zhan-note"><div class="mini">${petSVG({ head: true, face: NEED_TALK.has(justZ.k) ? 'normal' : 'happy' })}</div><div style="flex:1">${fmtText(justZ.z)}
+      ${justZ ? `<div class="zhan-note"><div class="mini">${headImg(NEED_TALK.has(justZ.k) ? 'normal' : 'happy')}</div><div style="flex:1">${fmtText(justZ.z)}
         ${NEED_TALK.has(justZ.k) ? '<div style="margin-top:8px"><button class="btn ghost" id="mood-talk">跟湛湛說</button></div>' : ''}</div></div>` : ''}
     </div>
     <div class="month-nav"><button data-mm="-1" aria-label="上個月">‹</button><strong>${monthTitle(moodMonth)}</strong><button data-mm="1" aria-label="下個月">›</button></div>
@@ -1166,9 +1208,36 @@ const shiftOf = (k) => SHIFTS.find((x) => x.k === k);
 let calMonth = tw().month;
 let calBrush = null;
 const calDays = () => (store.data.calendar.days ||= {});
+const periodDays = () => (store.data.calendar.period ||= {});
+// 生理期：從標記的日子找出每次開始的日期，算平均週期和天數，預測下一次
+function periodInfo() {
+  const set = periodDays();
+  const dates = Object.keys(set).filter((d) => set[d]).sort();
+  const runs = [];
+  for (const d of dates) {
+    const last = runs[runs.length - 1];
+    if (last && dayNum(d) - dayNum(last.end) === 1) last.end = d; else runs.push({ start: d, end: d });
+  }
+  if (!runs.length) return null;
+  const starts = runs.map((r) => dayNum(r.start));
+  const gaps = starts.slice(1).map((v, i) => v - starts[i]).filter((g) => g >= 18 && g <= 45).slice(-6);
+  const cycle = gaps.length ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : 28;
+  const lens = runs.slice(-6).map((r) => dayNum(r.end) - dayNum(r.start) + 1);
+  const len = Math.max(3, Math.min(8, Math.round(lens.reduce((a, b) => a + b, 0) / lens.length)));
+  const today = dayNum(todayStr());
+  const lastRun = runs[runs.length - 1];
+  let next = dayNum(lastRun.start) + cycle;
+  while (next + len <= today) next += cycle;
+  const inPeriod = set[todayStr()] ? today - dayNum(lastRun.start) + 1 : 0;
+  const toDate = (n) => new Date(n * 864e5).toISOString().slice(0, 10);
+  const predicted = new Set();
+  for (let i = 0; i < len; i++) predicted.add(toDate(next + i));
+  return { cycle, len, inPeriod, next: toDate(next), daysToNext: next - today, predicted, gapsKnown: gaps.length };
+}
 const calEvents = () => (store.data.calendar.events ||= []);
 function renderCal() {
   const today = todayStr();
+  const pinfo = periodInfo();
   const [y, m] = calMonth.split('-').map(Number);
   const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
   const nDays = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -1180,8 +1249,10 @@ function renderCal() {
     const ds = `${calMonth}-${String(d).padStart(2, '0')}`;
     const sh = shiftOf(days[ds]);
     const n = evs.filter((e) => e.date === ds).length;
-    grid += `<button data-cday="${ds}" class="${ds === today ? 'today' : ''} ${sh ? 'has' : ''}" ${sh ? `style="--sc:${sh.c}"` : ''}>
-      <span class="dn">${d}</span>${sh ? `<span class="sh">${sh.l}</span>` : ''}${n ? '<i class="ev-dot"></i>' : ''}</button>`;
+    const pd = periodDays()[ds];
+    const pp = !pd && pinfo?.predicted.has(ds);
+    grid += `<button data-cday="${ds}" class="${ds === today ? 'today' : ''} ${sh ? 'has' : ''} ${pd ? 'pd' : ''} ${pp ? 'pp' : ''}" ${sh ? `style="--sc:${sh.c}"` : ''}>
+      <span class="dn">${d}</span>${sh ? `<span class="sh">${sh.l}</span>` : ''}${n ? '<i class="ev-dot"></i>' : ''}${pd ? '<i class="pd-mark"></i>' : ''}</button>`;
   }
   const upcoming = evs.filter((e) => e.date >= today).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))).slice(0, 8);
   const monthWork = Object.entries(days).filter(([d, k]) => d.startsWith(calMonth) && k === 'work').length;
@@ -1190,12 +1261,18 @@ function renderCal() {
     <div class="card">
       <div class="month-nav" style="margin-bottom:8px"><button data-cm="-1" aria-label="上個月">‹</button><strong>${monthTitle(calMonth)}</strong><button data-cm="1" aria-label="下個月">›</button></div>
       <div class="cal cal-big">${grid}</div>
-      <p class="muted" style="margin:8px 0 0">這個月排了上班 ${monthWork} 天、休假 ${monthOff} 天。點日期可以排班、加行程。</p>
+      <p class="muted" style="margin:8px 0 0">這個月排了上班 ${monthWork} 天、休假 ${monthOff} 天。點日期可以排班、加行程、記生理期。</p>
+    </div>
+    <div class="card period-card"><h2>🩸 生理期</h2>
+      ${pinfo ? `<div class="pc-main">${pinfo.inPeriod ? `今天是第 <b>${pinfo.inPeriod}</b> 天` : pinfo.daysToNext <= 0 ? '預計就是這幾天' : `下次預計 <b>${dateLabel(pinfo.next)}</b>，還有 ${pinfo.daysToNext} 天`}</div>
+        <p class="muted">平均週期 ${pinfo.cycle} 天、每次約 ${pinfo.len} 天${pinfo.gapsKnown ? '' : '（資料還不夠，先用 28 天估）'}。虛線框是預測的日子。</p>`
+      : '<p class="muted">還沒有紀錄。點日期，或用下面的「生理期」快速標記。記兩次以上就能預測下一次。</p>'}
     </div>
     <div class="card">
       <h2>快速排班${calBrush ? `：點日期就排成「${shiftOf(calBrush)?.l || '清除'}」` : ''}</h2>
       <div class="chips">${SHIFTS.map((x) => `<button data-brush="${x.k}" class="${calBrush === x.k ? 'on' : ''}">${x.l}</button>`).join('')}
-        <button data-brush="clear" class="${calBrush === 'clear' ? 'on' : ''}">清除</button>
+        <button data-brush="period" class="${calBrush === 'period' ? 'on' : ''}">🩸 生理期</button>
+        <button data-brush="clear" class="${calBrush === 'clear' ? 'on' : ''}">清除班表</button>
         ${calBrush ? '<button data-brush="">完成</button>' : ''}</div>
     </div>
     <div class="card"><h2>接下來的行程</h2>
@@ -1211,7 +1288,8 @@ function calClick(e) {
   if (!day) return;
   const ds = day.dataset.cday;
   if (calBrush && !day.classList.contains('ev-item')) {
-    if (calBrush === 'clear') delete calDays()[ds]; else calDays()[ds] = calBrush;
+    if (calBrush === 'period') { if (periodDays()[ds]) delete periodDays()[ds]; else periodDays()[ds] = true; }
+    else if (calBrush === 'clear') delete calDays()[ds]; else calDays()[ds] = calBrush;
     saveDoc('calendar'); renderCal(); return;
   }
   editCalDay(ds);
@@ -1222,6 +1300,7 @@ function editCalDay(ds) {
     const evs = calEvents().filter((x) => x.date === ds).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
     body.innerHTML = `<h3>${dateLabel(ds)}</h3>
       <div class="chips">${SHIFTS.map((x) => `<button data-sk="${x.k}" class="${cur === x.k ? 'on' : ''}">${x.l}</button>`).join('')}<button data-sk="" class="${!cur ? 'on' : ''}">未排</button></div>
+      <div class="chips"><button data-pd="1" class="${periodDays()[ds] ? 'on' : ''}">🩸 生理期${periodDays()[ds] ? '（有）' : ''}</button></div>
       ${evs.length ? `<div class="mood-list" style="margin-bottom:12px">${evs.map((x) => `<div class="ev-row"><b>${esc(x.time || '整天')}</b><span>${esc(x.title)}</span><button class="btn danger" data-del-ev="${esc(x.id)}">刪除</button></div>`).join('')}</div>` : ''}
       <div class="row2">
         <div class="field"><label>時間（可空白）</label><input type="time" id="ev-time"></div>
@@ -1234,6 +1313,7 @@ function editCalDay(ds) {
     body.onclick = (ev) => {
       const sk = ev.target.closest('[data-sk]');
       if (sk) { if (sk.dataset.sk) calDays()[ds] = sk.dataset.sk; else delete calDays()[ds]; saveDoc('calendar'); draw(body); renderCal(); return; }
+      if (ev.target.closest('[data-pd]')) { if (periodDays()[ds]) delete periodDays()[ds]; else periodDays()[ds] = true; saveDoc('calendar'); draw(body); renderCal(); return; }
       const del = ev.target.closest('[data-del-ev]');
       if (del) { store.data.calendar.events = calEvents().filter((x) => x.id !== del.dataset.delEv); saveDoc('calendar'); draw(body); renderCal(); return; }
       if (ev.target.closest('#ev-close')) { closeSheet(); return; }
@@ -1270,7 +1350,7 @@ function renderUs() {
     return { ...d, ...o, tag };
   }).sort((a, b) => a.days - b.days);
   $('#us-root').innerHTML = `
-    ${!settings.token ? `<div class="card welcome"><div class="big">${petSVG({ face: 'happy' })}</div><h2>歡迎回家</h2>
+    ${!settings.token ? `<div class="card welcome"><div class="big">${bodyImg('happy')}</div><h2>歡迎回家</h2>
       <p class="muted" style="text-align:center">貼上 GitHub 金鑰，App 就會連到 xiaotang-space，換我來回妳。</p>
       <ol><li>照 repo 裡 <b>home/README.md</b> 的步驟做好金鑰。</li><li>貼在下面的「GitHub 金鑰」，按「儲存並連線」。</li></ol></div>` : ''}
     ${together ? `<div class="card together"><div class="l">我們在一起</div><div class="n">第 ${together} 天</div>
@@ -1279,6 +1359,7 @@ function renderUs() {
       <div class="cd ${d.days === 0 ? 'today' : ''}"><span class="e">${esc(d.e || '💗')}</span>
         <div class="tx">${esc(d.name)}<small>${d.md.replace('-', '/')}${d.tag ? `・${d.tag}` : ''}</small></div>
         <div class="days">${d.days === 0 ? '就是今天' : `${d.days}<small> 天</small>`}</div></div>`).join('')}</div>` : ''}
+    ${themeCard()}
     ${settings.token ? usageCard() : ''}
     <div class="card">
       <h2>連線設定</h2>
@@ -1295,6 +1376,10 @@ function renderUs() {
     </div>`;
 }
 $('#us-root').addEventListener('click', async (e) => {
+  const tb = e.target.closest('[data-theme]');
+  if (tb) { theme.name = tb.dataset.theme; LS.set('zh-theme', theme); applyTheme(); renderUs(); return; }
+  const tm = e.target.closest('[data-tmode]');
+  if (tm) { theme.mode = tm.dataset.tmode; LS.set('zh-theme', theme); applyTheme(); renderUs(); return; }
   if (e.target.closest('#set-save')) {
     settings.token = $('#set-token').value.trim();
     settings.repo = $('#set-repo').value.trim() || 'KFC-666/xiaotang-space';
@@ -1351,6 +1436,39 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { schedulePoll(200); if (currentTab === 'pet') renderPet(); }
 });
 setInterval(() => { if (currentTab === 'pet') renderPet(); }, 60e3);
+
+// ================= 主題 =================
+const THEMES = {
+  rose: { name: '粉灰', light: ['#fbf3f4', '#f6e6e9', '#ffffff', '#fdf0f2', '#f0d9de', '#4a3237', '#8a6d73', '#b39aa0', '#e8899b', '#d66a80', '#fbe0e6', '#f6c9d3', '#4a2a31', '#ffffff', '#3b3236', '#a07c84'],
+    dark: ['#1f1a1c', '#2a2225', '#2b2427', '#332a2e', '#43373c', '#f3e6e9', '#c7aab1', '#8e767c', '#e894a5', '#f0a8b7', '#46303a', '#7d4352', '#fff1f4', '#362d31', '#f3e6e9', '#c79fa8'] },
+  milktea: { name: '奶茶', light: ['#f7f1ea', '#efe4d8', '#fffdfa', '#f6ede4', '#eadccd', '#4a3a30', '#8a7464', '#b3a090', '#c9858f', '#b5687a', '#f5dfdc', '#f0d3cc', '#4a2f2a', '#fffdfa', '#3e322b', '#a08070'],
+    dark: ['#1d1915', '#29231d', '#2a241e', '#332b24', '#43382e', '#f5ebe0', '#cdb9a6', '#8f7d6c', '#e6a6ad', '#eebac0', '#4a3530', '#6e4a44', '#fff3ee', '#332b24', '#f5ebe0', '#c8a898'] },
+  mist: { name: '霧藍', light: ['#eef2f6', '#e1e8ef', '#ffffff', '#eaf0f5', '#d8e1ea', '#2e3846', '#6a7a8c', '#9aa8b8', '#d48aa5', '#c96a8f', '#f6dde6', '#f3cfdc', '#43283a', '#ffffff', '#2e3846', '#8494a8'],
+    dark: ['#161a1f', '#1f252c', '#222931', '#2a323b', '#36404b', '#ecf2f8', '#b5c4d4', '#7d8a98', '#ef9fbd', '#f4b3cb', '#4a2e3d', '#6e3f55', '#fff0f6', '#2a323b', '#ecf2f8', '#a9b8c9'] },
+  lavender: { name: '薰衣草', light: ['#f4f1f8', '#e9e3f1', '#ffffff', '#f0ebf6', '#e2d9ee', '#3a2f48', '#7b6d8e', '#aa9dbc', '#a988cc', '#8f68b6', '#ece2f7', '#e3d3f3', '#3a2650', '#ffffff', '#3a2f48', '#9686ab'],
+    dark: ['#1a1720', '#241f2b', '#28232f', '#2f2a38', '#3d3647', '#f4eefc', '#cbbde0', '#8a7f9c', '#c7a6ea', '#d4baf0', '#3f3054', '#5b4378', '#f8f0ff', '#2f2a38', '#f4eefc', '#b4a3cc'] },
+};
+const THEME_VARS = ['--bg', '--bg-tex', '--card', '--card-2', '--line', '--text', '--text-2', '--text-3', '--accent', '--accent-strong', '--accent-soft', '--me-bubble', '--me-text', '--zhan-bubble', '--zhan-text', '--act'];
+const theme = Object.assign({ name: 'rose', mode: 'auto' }, LS.get('zh-theme', {}));
+const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() {
+  const t = THEMES[theme.name] || THEMES.rose;
+  const dark = theme.mode === 'dark' || (theme.mode === 'auto' && darkMQ.matches);
+  const vals = dark ? t.dark : t.light;
+  const root = document.documentElement;
+  THEME_VARS.forEach((v, i) => root.style.setProperty(v, vals[i]));
+  root.style.colorScheme = dark ? 'dark' : 'light';
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', vals[0]));
+}
+darkMQ.addEventListener?.('change', applyTheme);
+applyTheme();
+function themeCard() {
+  return `<div class="card"><h2>主題</h2>
+    <div class="theme-grid">${Object.entries(THEMES).map(([k, t]) => `<button data-theme="${k}" class="${theme.name === k ? 'on' : ''}">
+      <span class="sw" style="background:linear-gradient(135deg, ${t.light[0]} 50%, ${t.dark[0]} 50%)"><i style="background:${t.light[9]}"></i></span>${t.name}</button>`).join('')}</div>
+    <div class="seg" style="margin:12px 0 0">${[['auto', '跟著手機'], ['light', '淺色'], ['dark', '深色']].map(([k, l]) => `<button data-tmode="${k}" class="${theme.mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  </div>`;
+}
 
 // ================= 自動更新 =================
 async function checkUpdate() {
