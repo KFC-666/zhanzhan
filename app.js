@@ -1,5 +1,5 @@
 
-const VERSION = '0.8.1';
+const VERSION = '0.8.2';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -8,8 +8,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.8.1`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.8.1" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.8.2`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.8.2" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -1240,14 +1240,25 @@ function periodInfo() {
   while (next + len <= today) next += cycle;
   const inPeriod = set[todayStr()] ? today - dayNum(lastRun.start) + 1 : 0;
   const toDate = (n) => new Date(n * 864e5).toISOString().slice(0, 10);
+  // 往後預測 6 個週期（大約半年），翻到之後的月份也看得到
+  const AHEAD = 6;
   const predicted = new Set();
-  for (let i = 0; i < len; i++) predicted.add(toDate(next + i));
+  const fertile = new Set();
+  const futureStarts = [];
+  for (let k = 0; k < AHEAD; k++) {
+    const st = next + k * cycle;
+    futureStarts.push(toDate(st));
+    for (let i = 0; i < len; i++) predicted.add(toDate(st + i));
+  }
   // 排卵日大約在下次月經前 14 天，易孕期是排卵日前 5 天到後 1 天（估算）
+  for (let k = 0; k <= AHEAD; k++) {
+    const o = next + k * cycle - 14;
+    if (o + 1 < today) continue;
+    for (let i = -5; i <= 1; i++) fertile.add(toDate(o + i));
+  }
   let ov = next - 14;
   if (ov + 1 < today) ov += cycle;
-  const fertile = new Set();
-  for (let i = -5; i <= 1; i++) fertile.add(toDate(ov + i));
-  return { cycle, len, inPeriod, next: toDate(next), daysToNext: next - today, predicted, gapsKnown: gaps.length, starts: runs.length,
+  return { cycle, len, inPeriod, next: toDate(next), daysToNext: next - today, predicted, futureStarts, cycleOvs: futureStarts.map((d) => toDate(dayNum(d) + cycle - 14)), gapsKnown: gaps.length, starts: runs.length,
     ovulation: toDate(ov), daysToOv: ov - today, fertile, fertileFrom: toDate(ov - 5), fertileTo: toDate(ov + 1) };
 }
 const calEvents = () => (store.data.calendar.events ||= []);
@@ -1268,7 +1279,7 @@ function renderCal() {
     const pd = periodDays()[ds] || health.period[ds];
     const pp = !pd && pinfo?.predicted.has(ds);
     const fw = !pd && pinfo?.fertile.has(ds);
-    const ov = pinfo?.ovulation === ds;
+    const ov = pinfo && (pinfo.ovulation === ds || pinfo.cycleOvs.includes(ds));
     grid += `<button data-cday="${ds}" class="${ds === today ? 'today' : ''} ${sh ? 'has' : ''} ${pd ? 'pd' : ''} ${pp ? 'pp' : ''} ${fw ? 'fw' : ''} ${ov ? 'ov' : ''}" ${sh ? `style="--sc:${sh.c}"` : ''}>
       <span class="dn">${d}</span>${sh ? `<span class="sh">${sh.l}</span>` : ''}${n ? '<i class="ev-dot"></i>' : ''}${pd ? '<i class="pd-mark"></i>' : ''}</button>`;
   }
@@ -1284,6 +1295,7 @@ function renderCal() {
     <div class="card period-card"><h2>🩸 生理期</h2>
       ${pinfo ? `<div class="pc-main">${pinfo.inPeriod ? `今天是第 <b>${pinfo.inPeriod}</b> 天` : pinfo.daysToNext <= 0 ? '預計就是這幾天' : `下次預計 <b>${dateLabel(pinfo.next)}</b>，還有 ${pinfo.daysToNext} 天`}</div>
         <div class="pc-sub">排卵日預估 <b>${dateLabel(pinfo.ovulation)}</b>${pinfo.daysToOv > 0 ? `（${pinfo.daysToOv} 天後）` : pinfo.daysToOv === 0 ? '（今天）' : ''}，易孕期 ${pinfo.fertileFrom.slice(5).replace('-', '/')}–${pinfo.fertileTo.slice(5).replace('-', '/')}</div>
+        <div class="pc-next">接下來：${pinfo.futureStarts.slice(0, 4).map((d) => d.slice(5).replace('-', '/')).join('、')}…</div>
         <p class="muted">根據 ${pinfo.starts} 次紀錄：平均週期 ${pinfo.cycle} 天、每次約 ${pinfo.len} 天${pinfo.gapsKnown ? '' : '（資料還不夠，先用 28 天估）'}。虛線框是預測的經期，綠色是易孕期。排卵日是估算，不能拿來避孕。</p>`
       : '<p class="muted">還沒有紀錄。點日期，或用下面的「生理期」快速標記。記兩次以上就能預測下一次。</p>'}
     </div>
