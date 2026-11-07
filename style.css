@@ -396,3 +396,19 @@ body.kb .tabbar { display: none; }
 .period-card .pc-sub { font-size: 14px; margin-bottom: 4px; }
 .period-card .pc-sub b { color: #4f8a5e; }
 .period-card .pc-next { font-size: 13.5px; color: var(--text-2); margin-bottom: 4px; }
+
+/* ---------- 0.9.0 小房間 ---------- */
+.room-wrap { margin: 0 -16px 10px; overflow: hidden; }
+.room { position: relative; width: 100%; background: #2b2533; overflow: hidden; touch-action: manipulation; }
+.room-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; user-select: none; -webkit-user-drag: none; }
+.room-night { position: absolute; inset: 0; pointer-events: none; }
+.ag { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+.ag img { position: absolute; left: 0; top: 0; transform-origin: 50% 100%; filter: drop-shadow(0 3px 2px rgba(60, 30, 40, .25)); user-select: none; -webkit-user-drag: none; cursor: pointer; }
+.ag-bub { position: absolute; left: 0; top: 0; font-size: 15px; line-height: 1; background: rgba(255,255,255,.92); border-radius: 99px; padding: 2px 5px; box-shadow: 0 1px 4px rgba(0,0,0,.15); white-space: nowrap; pointer-events: none; }
+.ag-bub:empty { display: none; }
+.room-status { display: grid; gap: 4px; font-size: 13.5px; color: var(--text-2); margin: 0 2px 12px; }
+.room-status span { background: var(--card); border-radius: 12px; padding: 6px 10px; box-shadow: var(--shadow); }
+.room-log .rl { font-size: 13.5px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.room-log .rl:last-child { border-bottom: 0; }
+.room-log .rl b { color: var(--text-3); font-weight: 400; margin-right: 8px; font-size: 12px; }
+.room-log .rl.star { color: var(--accent-strong); }
