@@ -1,5 +1,5 @@
 
-const VERSION = '0.5.1';
+const VERSION = '0.6.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -8,8 +8,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.5.1`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.5.1" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.6.0`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.6.0" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -1359,6 +1359,7 @@ function renderUs() {
       <div class="cd ${d.days === 0 ? 'today' : ''}"><span class="e">${esc(d.e || '💗')}</span>
         <div class="tx">${esc(d.name)}<small>${d.md.replace('-', '/')}${d.tag ? `・${d.tag}` : ''}</small></div>
         <div class="days">${d.days === 0 ? '就是今天' : `${d.days}<small> 天</small>`}</div></div>`).join('')}</div>` : ''}
+    ${settings.token ? pushCard() : ''}
     ${themeCard()}
     ${settings.token ? usageCard() : ''}
     <div class="card">
@@ -1376,6 +1377,8 @@ function renderUs() {
     </div>`;
 }
 $('#us-root').addEventListener('click', async (e) => {
+  if (e.target.closest('#push-on')) { enablePush(); return; }
+  if (e.target.closest('#push-test')) { testPush(); return; }
   const tb = e.target.closest('[data-theme]');
   if (tb) { theme.name = tb.dataset.theme; LS.set('zh-theme', theme); applyTheme(); renderUs(); return; }
   const tm = e.target.closest('[data-tmode]');
@@ -1436,6 +1439,61 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) { schedulePoll(200); if (currentTab === 'pet') renderPet(); }
 });
 setInterval(() => { if (currentTab === 'pet') renderPet(); }, 60e3);
+
+// ================= 推播通知 =================
+const VAPID_PUBLIC = 'BIujlx74-9a-YrAOSo06QgMCh2-uWKT6u8P__veOPKvUFQS7nlcvAPyv57sc_yVKGSYTX5ksBgRGm-3QFVe-hkA';
+let swReg = null;
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then((r) => { swReg = r; }).catch(() => {});
+  navigator.serviceWorker.addEventListener('message', (e) => { if (e.data?.type === 'open-chat') switchTab('chat'); });
+}
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function b64urlToU8(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+async function enablePush() {
+  if (!settings.token) { toast('先貼上金鑰'); return; }
+  if (!pushSupported()) { toast(isStandalone() ? '這支手機不支援通知（要 iOS 16.4 以上）' : '要從主畫面的湛湛打開，才能開通知'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') { toast('沒有允許通知。可以到「設定 → 通知 → 湛湛」打開'); renderUs(); return; }
+  try {
+    const reg = swReg || await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToU8(VAPID_PUBLIC) });
+    const json = sub.toJSON();
+    const path = 'home/data/push/subs.json';
+    for (let i = 0; i < 3; i++) {
+      const f = await gh.getFile(path);
+      let list = [];
+      try { list = f ? JSON.parse(f.text) : []; } catch { list = []; }
+      list = list.filter((x) => x.sub?.endpoint !== json.endpoint);
+      list.push({ sub: json, device: /iPhone/.test(navigator.userAgent) ? 'iPhone' : /iPad/.test(navigator.userAgent) ? 'iPad' : '其他裝置', time: new Date().toISOString() });
+      try { await gh.put(path, JSON.stringify(list, null, 1), f?.sha, 'App：開啟通知'); break; } catch (e) { if (i === 2 || (e.status !== 409 && e.status !== 422)) throw e; }
+    }
+    LS.set('zh-push', json.endpoint);
+    toast('通知開好了，可以按「測試」試試看');
+  } catch (e) { toast(`開不了通知：${e.message}`); }
+  renderUs();
+}
+async function testPush() {
+  const id = `t-${Date.now()}`;
+  try {
+    await gh.put(`home/inbox/${id}.json`, JSON.stringify({ id, kind: 'push-test', time: new Date().toISOString() }), null, '測試通知');
+    toast('送出了，大約半分鐘到一分鐘會響');
+  } catch (e) { toast(e.message); }
+}
+function pushCard() {
+  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
+  const on = perm === 'granted' && LS.get('zh-push', '');
+  const note = !isStandalone() ? '要從主畫面的「湛湛」打開，才能開通知。'
+    : !pushSupported() ? '這支手機的系統還不支援網頁通知（要 iOS 16.4 以上）。'
+    : perm === 'denied' ? '通知被關掉了，到 iPhone「設定 → 通知 → 湛湛」打開。'
+    : on ? '已開啟。我回妳的時候，鎖屏也會響。' : '開啟後，我回妳的時候手機會跳通知。';
+  return `<div class="card"><h2>通知</h2><p class="muted" style="margin:0 0 10px">${note}</p>
+    <div class="sheet-actions">${on ? '<button class="btn ghost" id="push-test">測試</button>' : ''}<button class="btn" id="push-on">${on ? '重新開啟' : '開啟通知'}</button></div></div>`;
+}
 
 // ================= 主題 =================
 const THEMES = {
