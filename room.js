@@ -2,7 +2,7 @@
 // 行為 = 時段 + 真實資料（班表、生理期、睡眠、紀念日）+ 需求值 + 隨機 + 每天的小故事（home/data/island/YYYY-MM-DD.json）。
 // 座標都是房間原圖（1536×1024）的像素，畫面依寬度縮放；腳的位置 = (x, y)，y 越大越前面。
 
-const V = '0.9.1';
+const V = '0.9.2';
 const IMG = (n) => `room/${n}.webp?v=${V}`;
 const ROOM_W = 1536;
 const ROOM_H = 1024;
@@ -295,11 +295,24 @@ export function createRoom(root, api) {
   // ---------- 初始位置 ----------
   function initial() {
     const m = minOfDay();
-    place(cheng, pick(PEN)); place(peng, pick(PEN));
+    const pens = [...PEN].sort(() => Math.random() - 0.5);
+    place(cheng, pens[0]); place(peng, pens[1]);
     place(zhan, pick(FLOOR)); place(tang, pick(FLOOR));
     if (isWorkDay() && m >= 8 * 60 + 25 && m < (shiftToday() === 'half' ? 13 * 60 + 10 : 18 * 60 + 40)) { tang.out = true; tang.el.style.display = 'none'; tang.text = '上班中'; }
     const sp = specialDay();
     if (sp) addLog(`今天是${sp.name}。${sp.name.includes('生日') ? '湛湛一早就把蛋糕藏在冰箱裡' : '湛湛把桌上的花換成新的'}`, true);
+    settle();
+  }
+  // 直接把人放在「現在正在做的事」的位置，不要每次打開都從角落走過去
+  function settle() {
+    pairLock = performance.now() / 1000 + 60;
+    for (const a of people) {
+      if (a.out) continue;
+      a.act = null;
+      decide(a);
+      if (a.out || a.act?.key === 'out') continue;
+      if (a.path.length) { const p = a.path[a.path.length - 1]; a.x = p.x; a.y = p.y; a.path = []; }
+    }
   }
   initial();
 
@@ -408,8 +421,18 @@ export function createRoom(root, api) {
     api.say(`${a.name}：${a.text || '發呆中'}`);
   });
 
+  let pausedAt = 0;
   return {
-    stop() { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); },
+    stop() { cancelAnimationFrame(raf); raf = 0; window.removeEventListener('resize', resize); },
+    pause() { if (raf) { cancelAnimationFrame(raf); raf = 0; pausedAt = performance.now(); } },
+    resume() {
+      resize();
+      if (raf) return;
+      // 離開超過 3 分鐘：照現在的時間重新安排位置
+      if (pausedAt && performance.now() - pausedAt > 3 * 60 * 1000) settle();
+      last = performance.now();
+      raf = requestAnimationFrame(frame);
+    },
     resize,
   };
 }

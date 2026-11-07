@@ -1,6 +1,6 @@
 
-const VERSION = '0.9.1';
-import { createRoom } from './room.js?v=0.9.1';
+const VERSION = '0.9.2';
+import { createRoom } from './room.js?v=0.9.2';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -9,8 +9,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.9.1`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.9.1" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.9.2`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.9.2" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -208,7 +208,7 @@ function renderTopbar() {
   }
 }
 function switchTab(tab) {
-  if (tab !== 'pet' && roomInst) { roomInst.stop(); roomInst = null; }
+  if (tab !== 'pet' && roomInst) roomInst.pause();
   currentTab = tab;
   LS.set('zh-tab', tab);
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${tab}`));
@@ -657,7 +657,7 @@ $('#pet-seg').addEventListener('click', (e) => {
 function showRoom() {
   $('#pet-root').style.display = 'none';
   $('#room-root').style.display = '';
-  if (roomInst) return;
+  if (roomInst) { roomInst.resume(); return; }
   roomInst = createRoom($('#room-root'), {
     tw,
     getCalendar: () => store.data.calendar,
@@ -676,7 +676,7 @@ function renderPet(first) {
   if (currentTab !== 'pet') return;
   renderPetSeg();
   if (petSeg === 'room') { showRoom(); return; }
-  if (roomInst) { roomInst.stop(); roomInst = null; $('#room-root').innerHTML = ''; }
+  if (roomInst) roomInst.pause();
   $('#room-root').style.display = 'none';
   $('#pet-root').style.display = '';
   const root = $('#pet-root');
