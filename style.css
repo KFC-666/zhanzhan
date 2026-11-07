@@ -339,3 +339,25 @@ body.kb .tabbar { display: none; }
 
 .chat-img { display: block; max-width: 100%; width: 240px; border-radius: 12px; margin: 2px 0; cursor: zoom-in; background: var(--card-2); min-height: 120px; }
 .usage .v small { font-size: 12px; font-weight: 400; color: var(--text-2); }
+
+/* ---------- 0.4.0 ---------- */
+.attach { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--text-2); flex: none; }
+.attach svg { width: 22px; height: 22px; }
+.attach-draft { flex: none; display: flex; gap: 8px; padding: 8px 12px 0; background: var(--card); overflow-x: auto; border-top: 1px solid var(--line); }
+.ad-item { position: relative; flex: none; }
+.ad-item img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; display: block; }
+.ad-item .ad-file { display: block; max-width: 160px; padding: 8px 10px; background: var(--card-2); border-radius: 10px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-item button { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 11px; }
+.bubble.att { font-size: 14px; text-align: left; }
+.chat-img.mine { margin-left: auto; }
+.cal-big button { aspect-ratio: auto; min-height: 52px; justify-content: flex-start; padding-top: 6px; gap: 2px; position: relative; }
+.cal-big .dn { font-size: 13px; color: var(--text); }
+.cal-big .sh { font-size: 10.5px; color: #fff; background: var(--sc); border-radius: 6px; padding: 0 4px; line-height: 1.5; }
+.cal-big .ev-dot { position: absolute; bottom: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent-strong); }
+.ev-item { display: flex; gap: 10px; align-items: baseline; text-align: left; padding: 6px 0; border-bottom: 1px dashed var(--line); width: 100%; }
+.ev-item:last-child { border-bottom: 0; }
+.ev-item b { flex: none; font-size: 13.5px; color: var(--accent-strong); }
+.ev-item span { font-size: 14.5px; }
+.ev-row { display: flex; gap: 10px; align-items: center; }
+.ev-row b { flex: none; font-size: 13.5px; color: var(--accent-strong); min-width: 44px; }
+.ev-row span { flex: 1; }

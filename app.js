@@ -1,6 +1,6 @@
-import { petSVG } from './pet.js?v=0.3.0';
+import { petSVG } from './pet.js?v=0.4.0';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 // ================= 小工具 =================
 const $ = (s, r = document) => r.querySelector(s);
@@ -104,8 +104,8 @@ const gh = {
     if (!res.ok) throw await this.fail(res);
     return { text: await res.text(), etag: res.headers.get('ETag') };
   },
-  async put(path, text, sha, message) {
-    const body = { message, content: b64enc(text), branch: settings.branch };
+  async put(path, text, sha, message, b64) {
+    const body = { message, content: b64 ?? b64enc(text), branch: settings.branch };
     if (sha) body.sha = sha;
     const res = await this.api('PUT', `contents/${encPath(path)}`, { body });
     if (!res.ok) throw await this.fail(res);
@@ -125,6 +125,7 @@ const DOCS = {
   pet: { path: 'home/data/pet.json', msg: 'App：小湛', def: () => ({ name: '小湛', full: 70, mood: 70, love: 0, updated: new Date().toISOString(), log: [] }) },
   ledger: { path: 'home/data/ledger.json', msg: 'App：記帳', def: () => ({ entries: [] }) },
   mood: { path: 'home/data/mood.json', msg: 'App：心情', def: () => ({ entries: [] }) },
+  calendar: { path: 'home/data/calendar.json', msg: 'App：行事曆', def: () => ({ days: {}, events: [] }) },
   config: { path: 'home/data/config.json', msg: 'App：設定', def: () => ({ together: '', married: '', dates: [] }), readonly: true },
 };
 const store = { data: {}, sha: {}, dirty: {}, timer: {} };
@@ -171,7 +172,7 @@ async function pushDoc(k) {
 
 // ================= 分頁 =================
 let currentTab = LS.get('zh-tab', 'chat');
-const TITLES = { pet: '小湛', photos: '相簿', ledger: '記帳', mood: '心情', us: '我們' };
+const TITLES = { pet: '小湛', photos: '相簿', ledger: '記帳', mood: '日曆', us: '我們' };
 function renderTopbar() {
   const tb = $('#topbar');
   if (currentTab === 'chat') {
@@ -281,9 +282,23 @@ async function pollChat() {
 async function deliver(m) {
   m.st = 'sending';
   savePending(); renderChat(true);
+  // 先把附件傳上去（傳過的會記下 path，重傳時跳過）
+  try {
+    for (const f of m.files || []) {
+      if (f.uploaded) continue;
+      const data = attachData.get(f.key);
+      if (!data) throw new Error('附件不見了，請重新選');
+      await gh.put(f.path, null, null, '小棠傳檔案', data);
+      f.uploaded = true;
+      attachData.delete(f.key);
+    }
+  } catch (e) {
+    m.st = 'fail'; m.err = e.message; savePending(); renderChat(true); toast(`檔案沒傳上去：${e.message}`); return;
+  }
+  const files = (m.files || []).map(({ path, name, type, size }) => ({ path, name, type, size }));
   for (let i = 0; i < 3; i++) {
     try {
-      await gh.put(`home/inbox/${m.id}.json`, JSON.stringify({ id: m.id, text: m.text, time: m.time }), null, '小棠傳訊息');
+      await gh.put(`home/inbox/${m.id}.json`, JSON.stringify({ id: m.id, text: m.text, time: m.time, ...(files.length ? { files } : {}) }), null, '小棠傳訊息');
       m.st = 'sent';
       break;
     } catch (e) {
@@ -296,12 +311,82 @@ async function deliver(m) {
   if (m.st === 'fail') toast(`沒送出去：${m.err}`);
   schedulePoll(3000);
 }
-function sendMessage(text) {
+function sendMessage(text, files = []) {
   if (!settings.token) { toast('先到「我們」分頁貼上金鑰'); return; }
   const id = `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const m = { id, text, time: new Date().toISOString(), st: 'sending' };
+  const month = tw().month;
+  const m = {
+    id, text, time: new Date().toISOString(), st: 'sending',
+    files: files.map((f, i) => ({ key: f.key, name: f.name, type: f.type, size: f.size, path: `home/data/chat-files/${month}/${id}-${i + 1}.${f.ext}` })),
+  };
   chat.pending.push(m);
   deliver(m);
+}
+
+// ---- 附件 ----
+const attachData = new Map(); // key -> base64（只放在記憶體）
+let attachDraft = []; // 還沒送出的附件 {key,name,type,size,ext,preview}
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.multiple = true;
+fileInput.accept = 'image/*,application/pdf,text/plain,text/markdown,.md,.txt,.csv,.json';
+function extOf(name, type) {
+  const m = /\.([a-z0-9]{1,5})$/i.exec(name || '');
+  if (m) return m[1].toLowerCase();
+  return { 'image/jpeg': 'jpg', 'image/png': 'png', 'application/pdf': 'pdf', 'text/plain': 'txt' }[type] || 'bin';
+}
+fileInput.addEventListener('change', async () => {
+  for (const f of [...fileInput.files].slice(0, 6)) {
+    try {
+      let blob = f, name = f.name, type = f.type || 'application/octet-stream';
+      if (type.startsWith('image/') && !/gif$/.test(type)) { blob = await shrinkImage(f, 2048); type = 'image/jpeg'; name = name.replace(/\.[^.]+$/, '') + '.jpg'; }
+      if (blob.size > 15 * 1024 * 1024) { toast(`${f.name} 太大了（上限 15 MB）`); continue; }
+      const key = `a-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      attachData.set(key, await blobB64(blob));
+      attachDraft.push({ key, name, type, size: blob.size, ext: extOf(name, type), preview: type.startsWith('image/') ? URL.createObjectURL(blob) : '' });
+    } catch (e) { toast(`讀不到 ${f.name}`); }
+  }
+  fileInput.value = '';
+  renderAttachDraft();
+});
+function renderAttachDraft() {
+  const box = $('#attach-draft');
+  box.style.display = attachDraft.length ? '' : 'none';
+  box.innerHTML = attachDraft.map((a) => `<div class="ad-item">${a.preview ? `<img src="${a.preview}" alt="">` : `<span class="ad-file">📄 ${esc(a.name)}</span>`}<button data-rm="${a.key}" aria-label="移除">✕</button></div>`).join('');
+  $('#send-btn').disabled = !input.value.trim() && !attachDraft.length;
+}
+$('#attach-btn').addEventListener('click', () => { if (!settings.token) { toast('先到「我們」分頁貼上金鑰'); return; } fileInput.click(); });
+$('#attach-draft').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-rm]');
+  if (!b) return;
+  attachDraft = attachDraft.filter((a) => a.key !== b.dataset.rm);
+  attachData.delete(b.dataset.rm);
+  renderAttachDraft();
+});
+// 私人 repo 裡的附件要帶金鑰下載，下載過的放快取
+const fileURLs = new Map();
+async function repoFileURL(path, type) {
+  if (fileURLs.has(path)) return fileURLs.get(path);
+  const key = `https://zhanzhan.cache/file/${encodeURIComponent(path)}`;
+  let blob = null, cache = null;
+  try { cache = await caches.open('zh-files'); const hit = await cache.match(key); if (hit) blob = await hit.blob(); } catch { /* */ }
+  if (!blob) {
+    const res = await gh.api('GET', `contents/${encPath(path)}?ref=${encodeURIComponent(settings.branch)}`, { headers: { Accept: 'application/vnd.github.raw' } });
+    if (!res.ok) throw await gh.fail(res);
+    blob = new Blob([await res.arrayBuffer()], { type: type || 'application/octet-stream' });
+    try { await cache?.put(key, new Response(blob)); } catch { /* */ }
+  }
+  const url = URL.createObjectURL(blob);
+  fileURLs.set(path, url);
+  return url;
+}
+function hydrateAttachments() {
+  document.querySelectorAll('#chat-list [data-fpath]:not([data-done])').forEach((el) => {
+    el.dataset.done = '1';
+    repoFileURL(el.dataset.fpath, el.dataset.ftype).then((u) => {
+      if (el.tagName === 'IMG') el.src = u; else el.dataset.url = u;
+    }).catch(() => el.classList.add('bad'));
+  });
 }
 
 const IMG_LINE = /(^|\n)[ \t]*(https:\/\/[^\s<]+?(?:\.(?:png|jpe?g|webp)|blob\.vercel-storage\.com\/[^\s<]+))(?:\?[^\s<]*)?[ \t]*(?=\n|$)/gi;
@@ -341,7 +426,13 @@ function renderChat(forceBottom) {
     if (m.role === 'system') { html += `<div class="sys">${esc(m.text)}</div>`; prev = m; return; }
     const isMe = m.role === 'user';
     const showAv = !isMe && !(prev && prev.role === 'zhan' && new Date(m.time) - new Date(prev.time) < 5 * 60e3);
-    const parts = isMe ? [m.text] : m.text.split(/\n\s*\n/).filter((x) => x.trim()).slice(0, 8);
+    const parts = isMe ? (m.text ? [m.text] : []) : m.text.split(/\n\s*\n/).filter((x) => x.trim()).slice(0, 8);
+    const filesHTML = (m.files || []).map((f) => {
+      if (m.pending && !f.uploaded) return `<div class="bubble att"><span class="ad-file">${f.type?.startsWith('image/') ? '🖼️' : '📄'} ${esc(f.name)}</span></div>`;
+      return f.type?.startsWith('image/')
+        ? `<img class="chat-img mine" data-fpath="${esc(f.path)}" data-ftype="${esc(f.type)}" alt="">`
+        : `<button class="bubble att" data-fpath="${esc(f.path)}" data-ftype="${esc(f.type)}" data-fname="${esc(f.name)}">📄 ${esc(f.name)}</button>`;
+    }).join('');
     let st = '';
     if (isMe) {
       if (m.st === 'sending') st = '<span class="st">傳送中</span>';
@@ -350,7 +441,7 @@ function renderChat(forceBottom) {
     }
     html += `<div class="row ${isMe ? 'me' : 'zhan'}">
       ${isMe ? '' : `<div class="mini ${showAv ? '' : 'spacer'}">${showAv ? miniHead : ''}</div>`}
-      <div class="bubbles">${parts.map((p) => `<div class="bubble" ${m.st === 'fail' ? `data-retry="${esc(m.id)}"` : ''}>${fmtText(p.trim())}</div>`).join('')}</div>
+      <div class="bubbles">${filesHTML}${parts.map((p) => `<div class="bubble" ${m.st === 'fail' ? `data-retry="${esc(m.id)}"` : ''}>${fmtText(p.trim())}</div>`).join('')}</div>
       <div class="meta">${st}${hm(m.time)}</div>
     </div>`;
     prev = m;
@@ -358,10 +449,13 @@ function renderChat(forceBottom) {
   html += `<div class="row zhan" id="typing-row" style="${waiting() ? '' : 'display:none'}"><div class="mini">${miniHead}</div><div class="bubbles"><div class="bubble typing"><i></i><i></i><i></i></div></div></div>`;
   list.innerHTML = html;
   if (forceBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
+  hydrateAttachments();
 }
 $('#chat-list').addEventListener('click', (e) => {
   const im = e.target.closest('img.chat-img');
-  if (im) { openChatImage(im.src); return; }
+  if (im) { if (im.src) openChatImage(im.src); return; }
+  const fb = e.target.closest('button.att[data-fpath]');
+  if (fb) { if (fb.dataset.url) { const a = document.createElement('a'); a.href = fb.dataset.url; a.download = fb.dataset.fname || 'file'; a.target = '_blank'; a.click(); } return; }
   const b = e.target.closest('[data-retry]');
   if (!b) return;
   const m = chat.pending.find((p) => p.id === b.dataset.retry);
@@ -372,7 +466,7 @@ const input = $('#chat-input');
 function autosize() {
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
-  $('#send-btn').disabled = !input.value.trim();
+  $('#send-btn').disabled = !input.value.trim() && !attachDraft.length;
 }
 input.addEventListener('input', () => { autosize(); LS.set('zh-draft', input.value); });
 input.addEventListener('keydown', (e) => {
@@ -381,11 +475,14 @@ input.addEventListener('keydown', (e) => {
 $('#composer').addEventListener('submit', (e) => {
   e.preventDefault();
   const t = input.value.trim();
-  if (!t) return;
+  if (!t && !attachDraft.length) return;
+  const files = attachDraft;
+  attachDraft = [];
+  renderAttachDraft();
   input.value = '';
   LS.del('zh-draft');
   autosize();
-  sendMessage(t);
+  sendMessage(t, files);
 });
 input.value = LS.get('zh-draft', '');
 
@@ -674,8 +771,11 @@ let moodJustSaved = null;
 const moodOf = (k) => MOODS.find((m) => m.k === k);
 const moodEntry = (d) => (store.data.mood.entries || []).find((x) => x.date === d);
 
+let calSeg = LS.get('zh-calseg', 'cal');
+const segHTML = () => `<div class="seg"><button data-seg="cal" class="${calSeg === 'cal' ? 'on' : ''}">行事曆</button><button data-seg="mood" class="${calSeg === 'mood' ? 'on' : ''}">心情</button></div>`;
 function renderMood() {
   if (currentTab !== 'mood') return;
+  if (calSeg === 'cal') return renderCal();
   const today = todayStr();
   const te = moodEntry(today);
   const [y, m] = moodMonth.split('-').map(Number);
@@ -690,7 +790,7 @@ function renderMood() {
   }
   const notes = (store.data.mood.entries || []).filter((x) => x.date.startsWith(moodMonth)).sort((a, b) => b.date.localeCompare(a.date));
   const justZ = moodJustSaved && moodOf(moodJustSaved.k);
-  $('#mood-root').innerHTML = `
+  $('#mood-root').innerHTML = `${segHTML()}
     <div class="card">
       <h2>今天 ${dateLabel(today)} 心情怎麼樣？</h2>
       <div class="mood-pick">${MOODS.map((x) => `<button data-mood="${x.k}" class="${te?.k === x.k ? 'on' : ''}"><span class="e">${x.e}</span>${x.l}</button>`).join('')}</div>
@@ -706,6 +806,9 @@ function renderMood() {
 }
 let moodPicked = null;
 $('#mood-root').addEventListener('click', (e) => {
+  const sg = e.target.closest('[data-seg]');
+  if (sg) { calSeg = sg.dataset.seg; LS.set('zh-calseg', calSeg); renderMood(); return; }
+  if (calSeg === 'cal') { calClick(e); return; }
   const mb = e.target.closest('[data-mood]');
   if (mb) {
     moodPicked = mb.dataset.mood;
@@ -1052,6 +1155,98 @@ function usageCard() {
   </div>`;
 }
 
+// ================= 行事曆（班表＋小行程） =================
+const SHIFTS = [
+  { k: 'work', l: '上班', c: 'var(--accent)' },
+  { k: 'off', l: '休假', c: '#7fb08a' },
+  { k: 'leave', l: '請假', c: '#e9b46a' },
+  { k: 'half', l: '半天', c: '#9aa6c8' },
+];
+const shiftOf = (k) => SHIFTS.find((x) => x.k === k);
+let calMonth = tw().month;
+let calBrush = null;
+const calDays = () => (store.data.calendar.days ||= {});
+const calEvents = () => (store.data.calendar.events ||= []);
+function renderCal() {
+  const today = todayStr();
+  const [y, m] = calMonth.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const nDays = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const days = calDays();
+  const evs = calEvents();
+  let grid = WD.map((w) => `<div class="wd">${w}</div>`).join('');
+  for (let i = 0; i < first; i++) grid += '<button class="blank" tabindex="-1"></button>';
+  for (let d = 1; d <= nDays; d++) {
+    const ds = `${calMonth}-${String(d).padStart(2, '0')}`;
+    const sh = shiftOf(days[ds]);
+    const n = evs.filter((e) => e.date === ds).length;
+    grid += `<button data-cday="${ds}" class="${ds === today ? 'today' : ''} ${sh ? 'has' : ''}" ${sh ? `style="--sc:${sh.c}"` : ''}>
+      <span class="dn">${d}</span>${sh ? `<span class="sh">${sh.l}</span>` : ''}${n ? '<i class="ev-dot"></i>' : ''}</button>`;
+  }
+  const upcoming = evs.filter((e) => e.date >= today).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))).slice(0, 8);
+  const monthWork = Object.entries(days).filter(([d, k]) => d.startsWith(calMonth) && k === 'work').length;
+  const monthOff = Object.entries(days).filter(([d, k]) => d.startsWith(calMonth) && k === 'off').length;
+  $('#mood-root').innerHTML = `${segHTML()}
+    <div class="card">
+      <div class="month-nav" style="margin-bottom:8px"><button data-cm="-1" aria-label="上個月">‹</button><strong>${monthTitle(calMonth)}</strong><button data-cm="1" aria-label="下個月">›</button></div>
+      <div class="cal cal-big">${grid}</div>
+      <p class="muted" style="margin:8px 0 0">這個月排了上班 ${monthWork} 天、休假 ${monthOff} 天。點日期可以排班、加行程。</p>
+    </div>
+    <div class="card">
+      <h2>快速排班${calBrush ? `：點日期就排成「${shiftOf(calBrush)?.l || '清除'}」` : ''}</h2>
+      <div class="chips">${SHIFTS.map((x) => `<button data-brush="${x.k}" class="${calBrush === x.k ? 'on' : ''}">${x.l}</button>`).join('')}
+        <button data-brush="clear" class="${calBrush === 'clear' ? 'on' : ''}">清除</button>
+        ${calBrush ? '<button data-brush="">完成</button>' : ''}</div>
+    </div>
+    <div class="card"><h2>接下來的行程</h2>
+      ${upcoming.length ? `<div class="mood-list">${upcoming.map((e) => `<button class="ev-item" data-cday="${e.date}"><b>${dateLabel(e.date)}${e.time ? ` ${esc(e.time)}` : ''}</b><span>${esc(e.title)}</span></button>`).join('')}</div>` : '<p class="muted">還沒有行程。</p>'}
+    </div>`;
+}
+function calClick(e) {
+  const cm = e.target.closest('[data-cm]');
+  if (cm) { calMonth = shiftMonth(calMonth, +cm.dataset.cm); renderCal(); return; }
+  const br = e.target.closest('[data-brush]');
+  if (br) { calBrush = br.classList.contains('on') ? null : (br.dataset.brush || null); renderCal(); return; }
+  const day = e.target.closest('[data-cday]');
+  if (!day) return;
+  const ds = day.dataset.cday;
+  if (calBrush && !day.classList.contains('ev-item')) {
+    if (calBrush === 'clear') delete calDays()[ds]; else calDays()[ds] = calBrush;
+    saveDoc('calendar'); renderCal(); return;
+  }
+  editCalDay(ds);
+}
+function editCalDay(ds) {
+  const draw = (body) => {
+    const cur = calDays()[ds];
+    const evs = calEvents().filter((x) => x.date === ds).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    body.innerHTML = `<h3>${dateLabel(ds)}</h3>
+      <div class="chips">${SHIFTS.map((x) => `<button data-sk="${x.k}" class="${cur === x.k ? 'on' : ''}">${x.l}</button>`).join('')}<button data-sk="" class="${!cur ? 'on' : ''}">未排</button></div>
+      ${evs.length ? `<div class="mood-list" style="margin-bottom:12px">${evs.map((x) => `<div class="ev-row"><b>${esc(x.time || '整天')}</b><span>${esc(x.title)}</span><button class="btn danger" data-del-ev="${esc(x.id)}">刪除</button></div>`).join('')}</div>` : ''}
+      <div class="row2">
+        <div class="field"><label>時間（可空白）</label><input type="time" id="ev-time"></div>
+        <div class="field"><label>行程</label><input id="ev-title" placeholder="例如：牙醫、跟雅君吃飯"></div>
+      </div>
+      <div class="sheet-actions"><button class="btn ghost" id="ev-close">完成</button><button class="btn" id="ev-add">加入行程</button></div>`;
+  };
+  openSheet('', (body) => {
+    draw(body);
+    body.onclick = (ev) => {
+      const sk = ev.target.closest('[data-sk]');
+      if (sk) { if (sk.dataset.sk) calDays()[ds] = sk.dataset.sk; else delete calDays()[ds]; saveDoc('calendar'); draw(body); renderCal(); return; }
+      const del = ev.target.closest('[data-del-ev]');
+      if (del) { store.data.calendar.events = calEvents().filter((x) => x.id !== del.dataset.delEv); saveDoc('calendar'); draw(body); renderCal(); return; }
+      if (ev.target.closest('#ev-close')) { closeSheet(); return; }
+      if (ev.target.closest('#ev-add')) {
+        const title = $('#ev-title').value.trim();
+        if (!title) { toast('寫一下是什麼行程'); return; }
+        calEvents().push({ id: `e-${Date.now()}`, date: ds, time: $('#ev-time').value || '', title });
+        saveDoc('calendar'); draw(body); renderCal(); toast('加好了');
+      }
+    };
+  });
+}
+
 // ================= 我們 =================
 function nextOccurrence(md) {
   const t = tw();
@@ -1157,7 +1352,23 @@ document.addEventListener('visibilitychange', () => {
 });
 setInterval(() => { if (currentTab === 'pet') renderPet(); }, 60e3);
 
+// ================= 自動更新 =================
+async function checkUpdate() {
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    if (!v || v === VERSION) return;
+    const tried = sessionStorage.getItem('zh-upd');
+    if (tried === v) return; // 這次開啟已經試過了，等 GitHub 更新完再說
+    sessionStorage.setItem('zh-upd', v);
+    location.replace(`./?v=${encodeURIComponent(v)}`);
+  } catch { /* 離線 */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+
 // ================= 開機 =================
+checkUpdate();
 autosize();
 switchTab(currentTab);
 syncAll(false);
