@@ -1,0 +1,98 @@
+[
+ {
+  "id": "z-pat",
+  "who": "zhan",
+  "label": "摸頭",
+  "text": "乖"
+ },
+ {
+  "id": "z-hug",
+  "who": "zhan",
+  "label": "抱抱",
+  "text": "過來"
+ },
+ {
+  "id": "z-hmm",
+  "who": "zhan",
+  "label": "嗯",
+  "text": "嗯。"
+ },
+ {
+  "id": "z-jealous",
+  "who": "zhan",
+  "label": "吃醋",
+  "text": "妳是我的"
+ },
+ {
+  "id": "z-eat",
+  "who": "zhan",
+  "label": "吃飯了沒",
+  "text": "吃飯了沒"
+ },
+ {
+  "id": "z-smile",
+  "who": "zhan",
+  "label": "寵溺笑",
+  "text": "妳喔"
+ },
+ {
+  "id": "z-sigh",
+  "who": "zhan",
+  "label": "無奈",
+  "text": "……"
+ },
+ {
+  "id": "z-night",
+  "who": "zhan",
+  "label": "晚安",
+  "text": "晚安"
+ },
+ {
+  "id": "t-cute",
+  "who": "tang",
+  "label": "撒嬌",
+  "text": "湛湛～"
+ },
+ {
+  "id": "t-angry",
+  "who": "tang",
+  "label": "生氣",
+  "text": "哼！"
+ },
+ {
+  "id": "t-cry",
+  "who": "tang",
+  "label": "哭哭",
+  "text": "嗚嗚"
+ },
+ {
+  "id": "t-heart",
+  "who": "tang",
+  "label": "比心",
+  "text": "愛你"
+ },
+ {
+  "id": "t-sneak",
+  "who": "tang",
+  "label": "偷襲",
+  "text": "看招！"
+ },
+ {
+  "id": "t-hungry",
+  "who": "tang",
+  "label": "餓了",
+  "text": "肚子餓"
+ },
+ {
+  "id": "t-hehe",
+  "who": "tang",
+  "label": "嘿嘿",
+  "text": "嘿嘿"
+ },
+ {
+  "id": "t-night",
+  "who": "tang",
+  "label": "晚安",
+  "text": "晚安"
+ }
+]

@@ -1,6 +1,6 @@
 
-const VERSION = '0.9.3';
-import { createRoom } from './room.js?v=0.9.3';
+const VERSION = '0.10.0';
+import { createRoom } from './room.js?v=0.10.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -9,8 +9,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.9.3`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.9.3" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.10.0`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.10.0" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -250,11 +250,14 @@ const chat = {
 const savePending = () => LS.set('zh-pending', chat.pending);
 const parseJSONL = (t) => t.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 const waiting = () => chat.pending.some((p) => p.st === 'sent');
+const LIVE_WORDS = { start: '收到了，正在想…', thinking: '思考中…', tool: '翻記憶中…', image: '畫圖中…', writing: '正在打字…' };
 
 function chatStatus() {
   if (!settings.token) return '還沒連線';
+  if (chat.pending.some((p) => p.st === 'queued')) return '…';
   if (chat.pending.some((p) => p.st === 'sending')) return '傳送中…';
   if (waiting()) {
+    if (chat.live && LIVE_WORDS[chat.live.status]) return LIVE_WORDS[chat.live.status];
     if (chat.runs?.some((r) => r.status === 'in_progress')) return '正在輸入…';
     return '訊息送到了';
   }
@@ -289,11 +292,25 @@ function schedulePoll(ms) {
   if (!settings.token || document.hidden) return;
   chat.timer = setTimeout(pollChat, ms ?? (waiting() ? 4000 : 30000));
 }
+// 湛湛回覆時，GitHub 那邊會即時更新 home/data/live.json（想到哪、翻了什麼）
+async function loadLive() {
+  try {
+    const r = await gh.getRaw('home/data/live.json', chat.liveEtag);
+    if (r.notModified || !r.text) return;
+    chat.liveEtag = r.etag;
+    const l = JSON.parse(r.text);
+    const ids = new Set(chat.pending.filter((p) => p.st === 'sent').map((p) => p.id));
+    const mine = (l.ids || []).some((x) => ids.has(x)) || (l.startedAt && chat.waitSince && l.startedAt > chat.waitSince - 60000);
+    chat.live = mine && l.status !== 'done' ? l : null;
+  } catch { /* 沒有就算了 */ }
+}
 async function pollChat() {
   try {
     const changed = await loadChat();
-    if (waiting()) chat.runs = await gh.activeRuns();
-    else chat.runs = null;
+    if (waiting()) {
+      chat.runs = await gh.activeRuns();
+      await loadLive();
+    } else { chat.runs = null; chat.live = null; }
     if (changed) renderChat(); else if (currentTab === 'chat') { renderTopbar(); renderTyping(); }
   } catch (e) {
     setSync('err', e.message);
@@ -301,49 +318,106 @@ async function pollChat() {
   schedulePoll();
 }
 
-async function deliver(m) {
-  m.st = 'sending';
+// ---- 傳送：先排隊，停手 2.5 秒後一次送出（文字＋貼圖＋照片只叫醒湛湛一次） ----
+const BATCH_WAIT = 2500;
+const BATCH_MAX = 12000;
+let batchTimer = null;
+let batchFirst = 0;
+function queueFlush(extend = false) {
+  clearTimeout(batchTimer);
+  if (!chat.pending.some((p) => p.st === 'queued')) return;
+  if (!batchFirst) batchFirst = Date.now();
+  const left = BATCH_MAX - (Date.now() - batchFirst);
+  batchTimer = setTimeout(flushQueue, Math.max(300, Math.min(BATCH_WAIT, left)));
+  if (extend) return;
+}
+async function flushQueue() {
+  clearTimeout(batchTimer);
+  batchFirst = 0;
+  const batch = chat.pending.filter((p) => p.st === 'queued');
+  if (!batch.length) return;
+  for (const m of batch) m.st = 'sending';
   savePending(); renderChat(true);
-  // 先把附件傳上去（傳過的會記下 path，重傳時跳過）
   try {
-    for (const f of m.files || []) {
-      if (f.uploaded) continue;
-      const data = attachData.get(f.key);
-      if (!data) throw new Error('附件不見了，請重新選');
-      await gh.put(f.path, null, null, '小棠傳檔案', data);
-      f.uploaded = true;
-      attachData.delete(f.key);
+    for (const m of batch) {
+      for (const f of m.files || []) {
+        if (f.uploaded) continue;
+        const data = attachData.get(f.key);
+        if (!data) throw new Error('附件不見了，請重新選');
+        await gh.put(f.path, null, null, '小棠傳檔案', data);
+        f.uploaded = true;
+        attachData.delete(f.key);
+      }
     }
   } catch (e) {
-    m.st = 'fail'; m.err = e.message; savePending(); renderChat(true); toast(`檔案沒傳上去：${e.message}`); return;
+    for (const m of batch) { m.st = 'fail'; m.err = e.message; }
+    savePending(); renderChat(true); toast(`檔案沒傳上去：${e.message}`); return;
   }
-  const files = (m.files || []).map(({ path, name, type, size }) => ({ path, name, type, size }));
+  const bid = batch[0].id;
+  const messages = batch.map((m) => ({
+    id: m.id, text: m.text, time: m.time,
+    ...(m.sticker ? { sticker: m.sticker } : {}),
+    ...((m.files || []).length ? { files: m.files.map(({ path, name, type, size }) => ({ path, name, type, size })) } : {}),
+  }));
+  let ok = false, err = '';
   for (let i = 0; i < 3; i++) {
     try {
-      await gh.put(`home/inbox/${m.id}.json`, JSON.stringify({ id: m.id, text: m.text, time: m.time, ...(files.length ? { files } : {}) }), null, '小棠傳訊息');
-      m.st = 'sent';
-      break;
+      await gh.put(`home/inbox/${bid}.json`, JSON.stringify({ id: bid, messages }), null, '小棠傳訊息');
+      ok = true; break;
     } catch (e) {
-      if (e.status === 422) { m.st = 'sent'; break; } // 檔案已經在了
-      if (i === 2 || (e.status && e.status !== 409)) { m.st = 'fail'; m.err = e.message; }
-      else await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+      if (e.status === 422) { ok = true; break; }
+      err = e.message;
+      if (e.status && e.status !== 409) break;
+      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
     }
   }
+  for (const m of batch) { m.st = ok ? 'sent' : 'fail'; if (!ok) m.err = err; }
+  if (ok) { chat.waitSince = Date.now(); chat.live = null; }
   savePending(); renderChat(true);
-  if (m.st === 'fail') toast(`沒送出去：${m.err}`);
+  if (!ok) toast(`沒送出去：${err}`);
   schedulePoll(3000);
 }
-function sendMessage(text, files = []) {
+function deliver(m) { m.st = 'queued'; savePending(); renderChat(true); flushQueue(); }
+function sendMessage(text, files = [], sticker = null) {
   if (!settings.token) { toast('先到「我們」分頁貼上金鑰'); return; }
   const id = `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const month = tw().month;
   const m = {
-    id, text, time: new Date().toISOString(), st: 'sending',
+    id, text, time: new Date().toISOString(), st: 'queued',
+    ...(sticker ? { sticker } : {}),
     files: files.map((f, i) => ({ key: f.key, name: f.name, type: f.type, size: f.size, path: `home/data/chat-files/${month}/${id}-${i + 1}.${f.ext}` })),
   };
   chat.pending.push(m);
-  deliver(m);
+  savePending(); renderChat(true);
+  queueFlush();
 }
+
+// ---- 貼圖 ----
+const STICKERS = [
+  ['z-pat', 'zhan', '乖'], ['z-hug', 'zhan', '過來'], ['z-hmm', 'zhan', '嗯。'], ['z-jealous', 'zhan', '妳是我的'],
+  ['z-eat', 'zhan', '吃飯了沒'], ['z-smile', 'zhan', '妳喔'], ['z-sigh', 'zhan', '……'], ['z-night', 'zhan', '晚安'],
+  ['t-cute', 'tang', '湛湛～'], ['t-angry', 'tang', '哼！'], ['t-cry', 'tang', '嗚嗚'], ['t-heart', 'tang', '愛你'],
+  ['t-sneak', 'tang', '看招！'], ['t-hungry', 'tang', '肚子餓'], ['t-hehe', 'tang', '嘿嘿'], ['t-night', 'tang', '晚安'],
+];
+const stickerSrc = (id) => `stickers/${id}.webp?v=${VERSION}`;
+let stickerTab = LS.get('zh-stab', 'tang');
+function openStickers() {
+  if (!settings.token) { toast('先到「我們」分頁貼上金鑰'); return; }
+  const draw = (body) => {
+    body.innerHTML = `<div class="seg"><button data-st="tang" class="${stickerTab === 'tang' ? 'on' : ''}">小棠</button><button data-st="zhan" class="${stickerTab === 'zhan' ? 'on' : ''}">湛湛</button></div>
+      <div class="sticker-grid">${STICKERS.filter((x) => x[1] === stickerTab).map(([id, , t]) => `<button data-stk="${id}"><img src="${stickerSrc(id)}" alt="${esc(t)}"></button>`).join('')}</div>`;
+  };
+  openSheet('', (body) => {
+    draw(body);
+    body.onclick = (ev) => {
+      const t = ev.target.closest('[data-st]');
+      if (t) { stickerTab = t.dataset.st; LS.set('zh-stab', stickerTab); draw(body); return; }
+      const b = ev.target.closest('[data-stk]');
+      if (b) { closeSheet(); sendMessage('', [], b.dataset.stk); }
+    };
+  });
+}
+$('#sticker-btn').addEventListener('click', openStickers);
 
 // ---- 附件 ----
 const attachData = new Map(); // key -> base64（只放在記憶體）
@@ -441,9 +515,28 @@ function fmtText(t) {
     .replace(/（[^（）\n]{0,200}）/g, (x) => `<span class="act">${x}</span>`);
 }
 let miniHead;
+function liveHTML() {
+  const l = chat.live;
+  if (!l) return '<div class="bubble typing"><i></i><i></i><i></i></div>';
+  const steps = (l.steps || []).map((t) => `<span>${esc(toolLabel(t))}</span>`).join('');
+  return `<div class="live">
+    <div class="live-head"><span class="live-dot"></span>${esc(LIVE_WORDS[l.status] || '思考中…')}</div>
+    ${l.thinking ? `<div class="live-think">${esc(l.thinking)}</div>` : ''}
+    ${steps ? `<div class="tr-tools">${steps}</div>` : ''}
+  </div>`;
+}
 function renderTyping() {
   const box = $('#typing-row');
-  if (box) box.style.display = waiting() ? '' : 'none';
+  if (!box) return;
+  box.style.display = waiting() ? '' : 'none';
+  const b = box.querySelector('.bubbles');
+  const html = liveHTML();
+  if (b && b.dataset.h !== html) {
+    b.innerHTML = html; b.dataset.h = html;
+    const sc = $('#chat-scroll');
+    if (sc.scrollHeight - sc.scrollTop - sc.clientHeight < 200) sc.scrollTop = sc.scrollHeight;
+    const t = b.querySelector('.live-think'); if (t) t.scrollTop = t.scrollHeight;
+  }
 }
 function renderChat(forceBottom) {
   if (currentTab !== 'chat') return;
@@ -470,7 +563,11 @@ function renderChat(forceBottom) {
     if (m.role === 'system') { html += `<div class="sys">${esc(m.text)}</div>`; prev = m; return; }
     const isMe = m.role === 'user';
     const showAv = !isMe && !(prev && prev.role === 'zhan' && new Date(m.time) - new Date(prev.time) < 5 * 60e3);
-    const parts = isMe ? (m.text ? [m.text] : []) : m.text.split(/\n\s*\n/).filter((x) => x.trim()).slice(0, 8);
+    let parts = isMe ? (m.text ? [m.text] : []) : m.text.split(/\n\s*\n/).filter((x) => x.trim()).slice(0, 8);
+    // 湛湛回覆裡的 [貼圖:z-xxx]
+    let zStk = [];
+    if (!isMe) { parts = parts.map((p) => p.replace(/\[貼圖[:：]\s*([zt]-[a-z]+)\]/g, (_, id) => { zStk.push(id); return ''; }).trim()).filter(Boolean); }
+    const stkHTML = [...(m.sticker ? [m.sticker] : []), ...zStk].filter((id) => STICKERS.some((x) => x[0] === id)).map((id) => `<img class="sticker ${isMe ? 'mine' : ''}" src="${stickerSrc(id)}" alt="">`).join('');
     const filesHTML = (m.files || []).map((f) => {
       if (m.pending && !f.uploaded) return `<div class="bubble att"><span class="ad-file">${f.type?.startsWith('image/') ? '🖼️' : '📄'} ${esc(f.name)}</span></div>`;
       return f.type?.startsWith('image/')
@@ -479,18 +576,18 @@ function renderChat(forceBottom) {
     }).join('');
     let st = '';
     if (isMe) {
-      if (m.st === 'sending') st = '<span class="st">傳送中</span>';
+      if (m.st === 'sending' || m.st === 'queued') st = '<span class="st">傳送中</span>';
       else if (m.st === 'fail') st = '<span class="st fail">沒送出・點泡泡重傳</span>';
       else if (!m.pending && i < lastZhan) st = '<span class="st">已讀</span>';
     }
     html += `<div class="row ${isMe ? 'me' : 'zhan'}">
       ${isMe ? '' : `<div class="mini ${showAv ? '' : 'spacer'}">${showAv ? miniHead : ''}</div>`}
-      <div class="bubbles">${filesHTML}${parts.map((p) => `<div class="bubble" ${m.st === 'fail' ? `data-retry="${esc(m.id)}"` : ''}>${fmtText(p.trim())}</div>`).join('')}</div>
+      <div class="bubbles">${filesHTML}${isMe ? stkHTML : ''}${parts.map((p) => `<div class="bubble" ${m.st === 'fail' ? `data-retry="${esc(m.id)}"` : ''}>${fmtText(p.trim())}</div>`).join('')}${isMe ? '' : stkHTML}</div>
       <div class="meta">${st}${hm(m.time)}</div>
     </div>${!isMe && m.trace ? traceHTML(m.trace) : ''}`;
     prev = m;
   });
-  html += `<div class="row zhan" id="typing-row" style="${waiting() ? '' : 'display:none'}"><div class="mini">${miniHead}</div><div class="bubbles"><div class="bubble typing"><i></i><i></i><i></i></div></div></div>`;
+  html += `<div class="row zhan" id="typing-row" style="${waiting() ? '' : 'display:none'}"><div class="mini">${miniHead}</div><div class="bubbles">${liveHTML()}</div></div>`;
   list.innerHTML = html;
   if (forceBottom || nearBottom) sc.scrollTop = sc.scrollHeight;
   hydrateAttachments();
@@ -512,7 +609,7 @@ function autosize() {
   input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
   $('#send-btn').disabled = !input.value.trim() && !attachDraft.length;
 }
-input.addEventListener('input', () => { autosize(); LS.set('zh-draft', input.value); });
+input.addEventListener('input', () => { autosize(); LS.set('zh-draft', input.value); if (chat.pending.some((p) => p.st === 'queued')) queueFlush(true); });
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $('#composer').requestSubmit(); }
 });
@@ -1498,6 +1595,9 @@ async function syncAll(loud) {
     if (chat.pending.some((p) => p.st === 'sending' || p.st === 'fail')) {
       chat.pending.filter((p) => p.st === 'sending').forEach((p) => { p.st = 'fail'; p.err = '上次沒送完'; });
       savePending();
+    }
+    if (chat.pending.some((p) => p.st === 'queued')) {
+      flushQueue();
     }
     setSync('ok', `已同步 ${hm(new Date().toISOString())}`);
     if (loud) toast('連上了');

@@ -11,13 +11,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="湛湛">
   <meta name="robots" content="noindex">
-  <link rel="apple-touch-icon" href="icon-180.png?v=0.9.3">
-  <link rel="icon" href="icon-180.png?v=0.9.3">
+  <link rel="apple-touch-icon" href="icon-180.png?v=0.10.0">
+  <link rel="icon" href="icon-180.png?v=0.10.0">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&display=swap">
-  <link rel="stylesheet" href="style.css?v=0.9.3">
+  <link rel="stylesheet" href="style.css?v=0.10.0">
 </head>
 <body>
   <div id="app">
@@ -27,6 +27,7 @@
         <div class="scroll" id="chat-scroll"><div id="chat-list"></div></div>
         <div class="attach-draft" id="attach-draft" style="display:none"></div>
         <form class="composer" id="composer">
+          <button class="attach" id="sticker-btn" type="button" aria-label="貼圖"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0"/><circle cx="9" cy="10" r=".9" fill="currentColor"/><circle cx="15" cy="10" r=".9" fill="currentColor"/></svg></button>
           <button class="attach" id="attach-btn" type="button" aria-label="附加照片或檔案"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20.5 11.5 12.3 19.7a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4l7.7-7.7"/></svg></button>
           <textarea id="chat-input" rows="1" placeholder="跟湛湛說…" enterkeyhint="enter"></textarea>
           <button class="send" id="send-btn" type="submit" aria-label="傳送" disabled>
@@ -53,6 +54,6 @@
   <div class="sheet" id="sheet"><div class="grab"></div><div id="sheet-body"></div></div>
   <div class="viewer" id="viewer"></div>
   <div class="toast" id="toast"></div>
-  <script type="module" src="app.js?v=0.9.3"></script>
+  <script type="module" src="app.js?v=0.10.0"></script>
 </body>
 </html>
