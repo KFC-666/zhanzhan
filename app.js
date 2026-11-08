@@ -1,6 +1,6 @@
 
-const VERSION = '0.9.2';
-import { createRoom } from './room.js?v=0.9.2';
+const VERSION = '0.9.3';
+import { createRoom } from './room.js?v=0.9.3';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -9,8 +9,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.9.2`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.9.2" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.9.3`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.9.3" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -411,6 +411,28 @@ function hydrateAttachments() {
   });
 }
 
+// 回覆的過程：想了什麼、翻了哪些記憶
+const MEM_NAMES = { 'profile.md': '小棠本人', 'work.md': '工作', 'relationship.md': '我們', 'intimacy.md': '親密偏好', 'people.md': '朋友', 'life.md': '生活', 'creative.md': '創作', 'progress.md': '進行中的事', 'CLAUDE.md': '基本設定' };
+function toolLabel(t) {
+  const file = String(t.detail || '').split('/').pop();
+  if (/generate_image/.test(t.name)) return `🎨 畫圖：${t.detail}`;
+  if (/edit_image/.test(t.name)) return `🎨 改圖`;
+  if (/save_to_album/.test(t.name)) return '🖼️ 存進相簿';
+  if (t.name === 'Read') return `📖 翻了「${MEM_NAMES[file] || file}」`;
+  if (t.name === 'Edit' || t.name === 'Write') return `✏️ 記進「${MEM_NAMES[file] || file}」`;
+  if (t.name === 'Grep' || t.name === 'Glob') return `🔍 找了「${t.detail}」`;
+  return `🔧 ${t.name}`;
+}
+function traceHTML(t) {
+  const tools = (t.tools || []).map(toolLabel);
+  const has = (t.thinking && t.thinking.trim()) || tools.length;
+  if (!has && !t.tokens) return '';
+  return `<details class="trace"><summary>💭 湛湛怎麼想的</summary>
+    ${t.thinking ? `<div class="tr-think">${esc(t.thinking)}</div>` : '<div class="tr-none">這次沒有另外想，直接回了。</div>'}
+    ${tools.length ? `<div class="tr-tools">${tools.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+    ${t.tokens ? `<div class="tr-meta">讀進 ${fmtTok(t.tokens.in)}・寫出 ${fmtTok(t.tokens.out)}${t.ms ? `・想了 ${Math.round(t.ms / 1000)} 秒` : ''}</div>` : ''}
+  </details>`;
+}
 const IMG_LINE = /(^|\n)[ \t]*(https:\/\/[^\s<]+?(?:\.(?:png|jpe?g|webp)|blob\.vercel-storage\.com\/[^\s<]+))(?:\?[^\s<]*)?[ \t]*(?=\n|$)/gi;
 function fmtText(t) {
   const s = String(t ?? '').replace(/!\[[^\]]*\]\((https:\/\/[^)\s]+)\)/g, '$1');
@@ -465,7 +487,7 @@ function renderChat(forceBottom) {
       ${isMe ? '' : `<div class="mini ${showAv ? '' : 'spacer'}">${showAv ? miniHead : ''}</div>`}
       <div class="bubbles">${filesHTML}${parts.map((p) => `<div class="bubble" ${m.st === 'fail' ? `data-retry="${esc(m.id)}"` : ''}>${fmtText(p.trim())}</div>`).join('')}</div>
       <div class="meta">${st}${hm(m.time)}</div>
-    </div>`;
+    </div>${!isMe && m.trace ? traceHTML(m.trace) : ''}`;
     prev = m;
   });
   html += `<div class="row zhan" id="typing-row" style="${waiting() ? '' : 'display:none'}"><div class="mini">${miniHead}</div><div class="bubbles"><div class="bubble typing"><i></i><i></i><i></i></div></div></div>`;
