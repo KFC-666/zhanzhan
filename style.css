@@ -439,3 +439,26 @@ body.kb .tabbar { display: none; }
 
 .room-pop { position: absolute; z-index: 5000; font-size: 16px; font-weight: 700; color: #e0708a; pointer-events: none; animation: roomPop 1.6s ease-out forwards; text-shadow: 0 1px 2px rgba(255,255,255,.8); }
 @keyframes roomPop { 0% { opacity: 0; transform: translate(-50%, 0) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -8px) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -46px) scale(1); } }
+
+/* ---------- 3D 小房間 ---------- */
+.r3d { display: flex; flex-direction: column; gap: 8px; }
+.r3d-stage { position: relative; height: min(58vh, 560px); margin: 0 -16px; overflow: hidden; }
+.r3d-stage canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.r3d-hint { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); font-size: .72rem; color: var(--text-2);
+  background: color-mix(in srgb, var(--card) 80%, transparent); padding: 3px 10px; border-radius: 999px; white-space: nowrap; pointer-events: none; }
+.r3d-bubble { position: absolute; left: 0; top: 0; background: var(--card); color: var(--text); border: 1px solid var(--line);
+  border-radius: 12px; padding: 4px 10px; font-size: .8rem; line-height: 1.4; pointer-events: none; white-space: nowrap;
+  box-shadow: var(--shadow); opacity: 0; transition: opacity .25s; }
+.r3d-bubble.on { opacity: 1; }
+.r3d-lines { display: grid; gap: 4px; min-height: 3.1em; }
+.r3d-lines p { margin: 0; font-size: .95rem; line-height: 1.5; display: flex; gap: 8px; align-items: baseline; }
+.r3d-lines .both { color: var(--accent-strong); font-weight: 600; }
+.r3d-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; transform: translateY(-1px); }
+.r3d-dot.z { background: var(--text); }
+.r3d-dot.t { background: var(--accent); }
+.r3d-row { display: flex; gap: 6px; align-items: center; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.r3d-row::-webkit-scrollbar { display: none; }
+.r3d-label { flex: none; font-size: .75rem; color: var(--text-3); margin-right: 2px; }
+.r3d-row button { flex: none; font-size: .85rem; color: var(--text); background: var(--card-2); border-radius: 999px; padding: 6px 12px; }
+.r3d-row button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.r3d-note { margin: 2px 0 0; font-size: .74rem; color: var(--text-3); line-height: 1.55; }

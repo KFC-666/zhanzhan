@@ -1,6 +1,6 @@
 
-const VERSION = '0.10.2';
-import { createRoom } from './room.js?v=0.10.2';
+const VERSION = '0.11.0';
+import { createRoom } from './room.js?v=0.11.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -9,8 +9,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.10.2`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.10.2" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.11.0`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.11.0" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -193,7 +193,7 @@ async function pushDoc(k) {
 
 // ================= 分頁 =================
 let currentTab = LS.get('zh-tab', 'chat');
-const TITLES = { pet: '小湛', photos: '相簿', ledger: '記帳', mood: '日曆', us: '我們' };
+const TITLES = { pet: '小房間', photos: '相簿', ledger: '記帳', mood: '日曆', us: '我們' };
 function renderTopbar() {
   const tb = $('#topbar');
   if (currentTab === 'chat') {
@@ -208,7 +208,7 @@ function renderTopbar() {
   }
 }
 function switchTab(tab) {
-  if (tab !== 'pet' && roomInst) roomInst.pause();
+  if (tab !== 'pet') { if (roomInst) roomInst.pause(); if (room3dInst) room3dInst.pause(); }
   currentTab = tab;
   LS.set('zh-tab', tab);
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${tab}`));
@@ -763,21 +763,15 @@ function petOutfit(night, asleep) {
 }
 // ---- 小房間 ----
 let roomInst = null;
-let petSeg = LS.get('zh-petseg', 'room');
+// 小房間分 3D 和 2.5D（小湛已經拿掉，2026/11/8）
+let petSeg = LS.get('zh-petseg', '3d');
+if (petSeg !== 'room' && petSeg !== '3d') petSeg = '3d';
 function renderPetSeg() {
-  $('#pet-seg').innerHTML = `<div class="seg"><button data-pseg="room" class="${petSeg === 'room' ? 'on' : ''}">小房間</button><button data-pseg="pet" class="${petSeg === 'pet' ? 'on' : ''}">小湛</button></div>`;
+  $('#pet-seg').innerHTML = `<div class="seg"><button data-pseg="3d" class="${petSeg === '3d' ? 'on' : ''}">3D</button><button data-pseg="room" class="${petSeg === 'room' ? 'on' : ''}">2.5D</button></div>`;
 }
-$('#pet-seg').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-pseg]');
-  if (!b) return;
-  petSeg = b.dataset.pseg; LS.set('zh-petseg', petSeg);
-  renderPet(true);
-});
-function showRoom() {
-  $('#pet-root').style.display = 'none';
-  $('#room-root').style.display = '';
-  if (roomInst) { roomInst.resume(); return; }
-  roomInst = createRoom($('#room-root'), {
+let room3dInst = null, room3dLoading = false;
+function roomApi() {
+  return {
     tw,
     getCalendar: () => store.data.calendar,
     getHealthDays: () => health.days,
@@ -789,12 +783,44 @@ function showRoom() {
       try { return r.text ? JSON.parse(r.text) : null; } catch { return null; }
     },
     say: toast,
-  });
+  };
+}
+async function show3D() {
+  $('#pet-root').style.display = 'none';
+  $('#room-root').style.display = 'none';
+  $('#room3d-root').style.display = '';
+  if (roomInst) roomInst.pause();
+  if (room3dInst) { room3dInst.resume(); return; }
+  if (room3dLoading) return;
+  room3dLoading = true;
+  $('#room3d-root').innerHTML = '<p class="muted" style="text-align:center;padding:40px 0">3D 小房間載入中…</p>';
+  try {
+    const { createRoom3D } = await import(`./room3d.js?v=${VERSION}`);
+    room3dInst = createRoom3D($('#room3d-root'), roomApi(), VERSION);
+    if (currentTab !== 'pet' || petSeg !== '3d') room3dInst.pause();
+  } catch (e) {
+    $('#room3d-root').innerHTML = `<p class="muted" style="text-align:center;padding:40px 0">3D 小房間打不開：${esc(String(e.message || e))}</p>`;
+  } finally { room3dLoading = false; }
+}
+$('#pet-seg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pseg]');
+  if (!b) return;
+  petSeg = b.dataset.pseg; LS.set('zh-petseg', petSeg);
+  renderPet(true);
+});
+function showRoom() {
+  $('#pet-root').style.display = 'none';
+  $('#room3d-root').style.display = 'none';
+  if (room3dInst) room3dInst.pause();
+  $('#room-root').style.display = '';
+  if (roomInst) { roomInst.resume(); return; }
+  roomInst = createRoom($('#room-root'), roomApi());
 }
 function renderPet(first) {
   if (currentTab !== 'pet') return;
   renderPetSeg();
   if (petSeg === 'room') { showRoom(); return; }
+  if (petSeg === '3d') { show3D(); return; }
   if (roomInst) roomInst.pause();
   $('#room-root').style.display = 'none';
   $('#pet-root').style.display = '';
