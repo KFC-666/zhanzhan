@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十套顏色、粉圓字體、兔兔底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.6.3
+// @version      0.6.4
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -319,6 +319,7 @@ html[data-xt-font="huninn"] :where(pre, code, kbd, samp, .font-mono, [class*="fo
 #xt-skin-panel .xt-thumbs button[aria-pressed="true"] .xt-thumb { box-shadow: 0 0 0 2px var(--xt-popover), 0 0 0 4px var(--xt-accent); }
 #xt-skin-panel .xt-img-only { display: none; }
 html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
+#xt-skin-panel button.xt-diag { width: 100%; min-height: 0; margin-top: 2px; padding: 6px; font-size: 11px; background: none; color: var(--xt-text-3); }
 #xt-skin-panel .xt-note { font-size: 11px; color: var(--xt-text-3); margin: -6px 2px 10px; min-height: 0; }
 #xt-skin-panel .xt-note:empty { display: none; }
 `;
@@ -477,6 +478,7 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
       }
     });
     probeAroundComposer();
+    scanSiblings();
   }
 
   // 輸入框左右兩邊和下面直接點幾個點，看是哪幾層蓋在背景上面（有些底不是輸入框的上層，是旁邊的兄弟或 ::before）
@@ -485,6 +487,82 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
     if (!cs.content || cs.content === 'none' || cs.content === 'normal') return false;
     return alphaOf(cs.backgroundColor) >= 0.5 || /gradient/.test(cs.backgroundImage);
   }
+  // 有些底設了 pointer-events: none（點不到），上面那種點點看的方法會穿過去。
+  // 所以再從輸入框往上走，每一層的兄弟（往下三層）只要橫跨輸入框、又跟輸入框同高度，就檢查它
+  function composerBox() {
+    return document.querySelector('[data-cds="ChatComposer"] .rounded-composer') || document.querySelector('[data-cds="ChatComposer"]');
+  }
+  function markLayer(el) {
+    if (el.hasAttribute('data-xt-ground')) return;
+    if (!el.hasAttribute('data-xt-band') && isOpaque(el)) el.setAttribute('data-xt-band', '');
+    if (pseudoOpaque(el, '::before')) el.setAttribute('data-xt-band-before', '');
+    if (pseudoOpaque(el, '::after')) el.setAttribute('data-xt-band-after', '');
+  }
+  function scanSiblings() {
+    const box = composerBox();
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    if (!r.width) return;
+    const covers = er => er.width > 0 && er.left <= r.left + 1 && er.right >= r.right - 1 && er.bottom > r.top && er.top < innerHeight;
+    const visit = (el, depth) => {
+      if (el.id === 'xt-skin-panel' || el.id === 'xt-skin-tab' || el.contains(box)) return;
+      if (!covers(el.getBoundingClientRect())) return;
+      markLayer(el);
+      if (depth > 0) for (const c of el.children) visit(c, depth - 1);
+    };
+    for (let a = box.parentElement; a && a !== document.body && a !== html; a = a.parentElement) {
+      if (pseudoOpaque(a, '::before')) a.setAttribute('data-xt-band-before', '');
+      if (pseudoOpaque(a, '::after')) a.setAttribute('data-xt-band-after', '');
+      const parent = a.parentElement;
+      if (!parent) break;
+      for (const sib of parent.children) if (sib !== a) visit(sib, 3);
+    }
+  }
+
+  // 🐰 選單最下面的「複製診斷」：把輸入框附近每一層的樣子複製起來，貼給湛湛看
+  function diagnose() {
+    const box = composerBox();
+    const out = { v: '0.6.4', w: innerWidth, h: innerHeight, mode: state.bg, layers: [] };
+    if (!box) { out.err = 'no composer'; return JSON.stringify(out); }
+    const r = box.getBoundingClientRect();
+    out.box = [r.left, r.top, r.width, r.height].map(Math.round);
+    const brief = el => {
+      const cs = getComputedStyle(el), b = getComputedStyle(el, '::before'), a = getComputedStyle(el, '::after');
+      const er = el.getBoundingClientRect();
+      const pe = x => (x.content && x.content !== 'none' && x.content !== 'normal') ? (x.backgroundColor + ' ' + x.backgroundImage.slice(0, 40)) : '';
+      return {
+        tag: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 120), cds: el.getAttribute('data-cds') || '',
+        xt: [...el.attributes].filter(t => t.name.startsWith('data-xt')).map(t => t.name.slice(8)).join(','),
+        rect: [er.left, er.top, er.width, er.height].map(Math.round), bg: cs.backgroundColor,
+        img: cs.backgroundImage.slice(0, 60), pe: cs.pointerEvents, pos: cs.position, z: cs.zIndex,
+        before: pe(b), after: pe(a),
+      };
+    };
+    const seen = new Set();
+    const add = (el, how) => { if (seen.has(el) || el === html || el === document.body) return; seen.add(el); out.layers.push(Object.assign({ how }, brief(el))); };
+    for (const [x, y] of [[r.left - 30, r.top + r.height / 2], [r.right + 30, r.top + r.height / 2], [r.left - 30, innerHeight - 3]]) {
+      if (x >= 0 && x < innerWidth && document.elementsFromPoint) document.elementsFromPoint(x, y).forEach(el => add(el, 'pt'));
+    }
+    for (let a = box; a && a !== document.body; a = a.parentElement) {
+      add(a, 'up');
+      if (a.parentElement) for (const sib of a.parentElement.children) {
+        const er = sib.getBoundingClientRect();
+        if (sib !== a && er.bottom > r.top && er.width > 100) add(sib, 'sib');
+      }
+    }
+    return JSON.stringify(out);
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* 改用舊方法 */ }
+    const t = document.createElement('textarea');
+    t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    t.remove();
+    return ok;
+  }
+
   function probeAroundComposer() {
     if (!document.elementsFromPoint) return;
     const box = document.querySelector('[data-cds="ChatComposer"] .rounded-composer') || document.querySelector('[data-cds="ChatComposer"]');
@@ -665,6 +743,7 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
         h('button', { 'data-font': 'huninn', text: '粉圓' }),
         h('button', { 'data-font': 'default', text: '原本的' }),
       ]),
+      h('button', { 'data-diag': '1', class: 'xt-diag', text: '複製診斷（哪裡沒變色時按，貼給湛湛）' }),
     ]);
     panel.hidden = true;
 
@@ -688,6 +767,11 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
       const b = e.target.closest('button');
       if (!b) return;
       const d = b.dataset;
+      if (d.diag) {
+        markGrounds();
+        copyText(diagnose()).then(ok => note(ok ? '診斷複製好了，貼給湛湛。' : '複製失敗，截圖給湛湛。'));
+        return;
+      }
       let bgChanged = false;
       if (d.theme) state.theme = d.theme;
       if (d.font) state.font = d.font;
