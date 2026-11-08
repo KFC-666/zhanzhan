@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十套顏色、粉圓字體、兔兔底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.6.4
+// @version      0.6.5
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -517,12 +517,18 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
       if (!parent) break;
       for (const sib of parent.children) if (sib !== a) visit(sib, 3);
     }
+    // 輸入框是另外掛在畫面上的，對話區自己底部的淡出層（點不到、也不在輸入框上層）要另外找
+    document.querySelectorAll(FADE_SEL).forEach(el => {
+      if (el.closest('#xt-skin-panel') || el.contains(box) || box.contains(el)) return;
+      if (covers(el.getBoundingClientRect())) markLayer(el);
+    });
   }
+  const FADE_SEL = '[class*="pointer-events-none"], [class*="gradient"], [class*="from-"], [class*="mask"], [class*="fade"]';
 
   // 🐰 選單最下面的「複製診斷」：把輸入框附近每一層的樣子複製起來，貼給湛湛看
   function diagnose() {
     const box = composerBox();
-    const out = { v: '0.6.4', w: innerWidth, h: innerHeight, mode: state.bg, layers: [] };
+    const out = { v: '0.6.5', w: innerWidth, h: innerHeight, mode: state.bg, layers: [] };
     if (!box) { out.err = 'no composer'; return JSON.stringify(out); }
     const r = box.getBoundingClientRect();
     out.box = [r.left, r.top, r.width, r.height].map(Math.round);
@@ -534,7 +540,7 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
         tag: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 120), cds: el.getAttribute('data-cds') || '',
         xt: [...el.attributes].filter(t => t.name.startsWith('data-xt')).map(t => t.name.slice(8)).join(','),
         rect: [er.left, er.top, er.width, er.height].map(Math.round), bg: cs.backgroundColor,
-        img: cs.backgroundImage.slice(0, 60), pe: cs.pointerEvents, pos: cs.position, z: cs.zIndex,
+        img: cs.backgroundImage.slice(0, 60), mask: (cs.maskImage || cs.webkitMaskImage || '').slice(0, 40), pe: cs.pointerEvents, pos: cs.position, z: cs.zIndex,
         before: pe(b), after: pe(a),
       };
     };
@@ -543,6 +549,10 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
     for (const [x, y] of [[r.left - 30, r.top + r.height / 2], [r.right + 30, r.top + r.height / 2], [r.left - 30, innerHeight - 3]]) {
       if (x >= 0 && x < innerWidth && document.elementsFromPoint) document.elementsFromPoint(x, y).forEach(el => add(el, 'pt'));
     }
+    document.querySelectorAll(FADE_SEL).forEach(el => {
+      const er = el.getBoundingClientRect();
+      if (er.width > 100 && er.bottom > r.top && er.top < innerHeight && !box.contains(el)) add(el, 'fade');
+    });
     for (let a = box; a && a !== document.body; a = a.parentElement) {
       add(a, 'up');
       if (a.parentElement) for (const sib of a.parentElement.children) {
