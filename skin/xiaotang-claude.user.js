@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十套顏色、粉圓字體、兔兔底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.6.1
+// @version      0.6.2
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -183,27 +183,48 @@ ${SCOPES} {
 }
 
 /* ======================== 背景圖模式 ======================== */
-html[data-xt-veil="light"]  { --xt-veil-pct: 38%; --xt-blur: 0px; }
-html[data-xt-veil="mid"]    { --xt-veil-pct: 56%; --xt-blur: 2px; }
-html[data-xt-veil="strong"] { --xt-veil-pct: 72%; --xt-blur: 5px; }
+html[data-xt-veil="light"]  { --xt-veil-pct: 40%; }
+html[data-xt-veil="mid"]    { --xt-veil-pct: 58%; }
+html[data-xt-veil="strong"] { --xt-veil-pct: 74%; }
+html { --xt-veil: color-mix(in srgb, var(--xt-page) var(--xt-veil-pct, 58%), transparent); }
 html[data-xt-bg="image"] { background: var(--xt-page) !important; }
 /* 圖鋪在最底下一層，上面再蓋一層跟主題同色的霧 */
 html[data-xt-bg="image"]::before, html[data-xt-bg="image"]::after {
   content: ""; position: fixed; z-index: -1; pointer-events: none;
 }
 html[data-xt-bg="image"]::before {
-  inset: -24px;
+  inset: 0;
   background-image: var(--xt-bg-img, none); background-size: cover; background-repeat: no-repeat;
   background-position: var(--xt-bg-pos, center);
-  filter: blur(var(--xt-blur));
 }
 html[data-xt-bg="image"]::after {
   inset: 0;
-  background: color-mix(in srgb, var(--xt-page) var(--xt-veil-pct), transparent);
+  background: var(--xt-veil);
 }
 /* 原本鋪底紋的那幾層改成透明，讓圖透出來 */
 html[data-xt-bg="image"] :is(.tiles-shell, [data-sim-native-ground], [data-xt-ground], body) {
   background: transparent !important;
+}
+/* 比較窄的不透明底（像電腦版輸入框下面那一條）：
+   電腦上鋪一份跟背景對齊的圖（fixed），手機上直接透明 */
+@media (hover: hover) and (pointer: fine) {
+  html[data-xt-bg="image"] [data-xt-band] {
+    background-color: transparent !important;
+    background-image: linear-gradient(var(--xt-veil), var(--xt-veil)), var(--xt-bg-img, none) !important;
+    background-size: auto, cover !important;
+    background-position: 0 0, var(--xt-bg-pos, center) !important;
+    background-repeat: no-repeat !important;
+    background-attachment: fixed, fixed !important;
+  }
+  html:not([data-xt-bg="image"]) [data-xt-band] {
+    background-color: var(--xt-page) !important;
+    background-image: linear-gradient(var(--xt-pattern-fade), var(--xt-pattern-fade)), var(--xt-pattern) !important;
+    background-size: auto, 160px 160px !important;
+    background-attachment: fixed, fixed !important;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  html[data-xt-bg="image"] [data-xt-band] { background: transparent !important; }
 }
 html[data-xt-bg="image"] .dframe-sidebar, html[data-xt-bg="image"] .dframe-sidebar-body {
   --df-web-sidebar-bg: color-mix(in srgb, var(--xt-sidebar) 80%, transparent) !important;
@@ -422,13 +443,24 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
     const s = color.match(/\/\s*([\d.]+)\s*\)$/);
     return s ? parseFloat(s[1]) : 1;
   }
+  function isOpaque(el) {
+    const cs = getComputedStyle(el);
+    if (parseFloat(cs.borderTopLeftRadius) >= 4) return false;   // 圓角的是框框本身（像輸入框），不是底
+    return alphaOf(cs.backgroundColor) >= 0.5 || /gradient/.test(cs.backgroundImage);
+  }
   function markGrounds() {
     const minW = innerWidth * 0.6;
     document.querySelectorAll('[role="feed"], [data-cds="ChatComposer"]').forEach(start => {
-      for (let el = start.parentElement; el && el !== document.body && el !== html; el = el.parentElement) {
-        if (el.hasAttribute('data-xt-ground')) continue;
-        if (el.getBoundingClientRect().width < minW) continue;
-        if (alphaOf(getComputedStyle(el).backgroundColor) >= 0.5) el.setAttribute('data-xt-ground', '');
+      const startW = start.getBoundingClientRect().width;
+      for (let el = start; el && el !== document.body && el !== html; el = el.parentElement) {
+        if (el.hasAttribute('data-xt-ground') || el.hasAttribute('data-xt-band')) continue;
+        const w = el.getBoundingClientRect().width;
+        if (el !== start && w >= minW) {
+          if (alphaOf(getComputedStyle(el).backgroundColor) >= 0.5) el.setAttribute('data-xt-ground', '');
+        } else if (startW > 0 && w >= startW - 1 && isOpaque(el)) {
+          // 寬度不到六成、但比輸入框或對話欄還寬的那層底，例如電腦版輸入框下面那一條
+          el.setAttribute('data-xt-band', '');
+        }
       }
     });
   }
