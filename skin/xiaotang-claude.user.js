@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十套顏色、粉圓字體、兔兔底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.6.5
+// @version      0.6.6
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -201,6 +201,10 @@ html[data-xt-bg="image"]::before {
 html[data-xt-bg="image"]::after {
   inset: 0;
   background: var(--xt-veil);
+}
+/* 換成背景圖的那幾層，原本的分隔線和陰影也拿掉（不然會留一條細線） */
+html[data-xt-bg="image"] [data-xt-band], html[data-xt-bg="image"] [data-xt-ground] {
+  border-color: transparent !important; box-shadow: none !important;
 }
 /* 原本鋪底紋的那幾層改成透明，讓圖透出來 */
 html[data-xt-bg="image"] :is(.tiles-shell, [data-sim-native-ground], [data-xt-ground], body) {
@@ -528,7 +532,7 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
   // 🐰 選單最下面的「複製診斷」：把輸入框附近每一層的樣子複製起來，貼給湛湛看
   function diagnose() {
     const box = composerBox();
-    const out = { v: '0.6.5', w: innerWidth, h: innerHeight, mode: state.bg, layers: [] };
+    const out = { v: '0.6.6', w: innerWidth, h: innerHeight, mode: state.bg, layers: [] };
     if (!box) { out.err = 'no composer'; return JSON.stringify(out); }
     const r = box.getBoundingClientRect();
     out.box = [r.left, r.top, r.width, r.height].map(Math.round);
@@ -540,7 +544,7 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
         tag: el.tagName.toLowerCase(), cls: String(el.className || '').slice(0, 120), cds: el.getAttribute('data-cds') || '',
         xt: [...el.attributes].filter(t => t.name.startsWith('data-xt')).map(t => t.name.slice(8)).join(','),
         rect: [er.left, er.top, er.width, er.height].map(Math.round), bg: cs.backgroundColor,
-        img: cs.backgroundImage.slice(0, 60), mask: (cs.maskImage || cs.webkitMaskImage || '').slice(0, 40), pe: cs.pointerEvents, pos: cs.position, z: cs.zIndex,
+        img: cs.backgroundImage.slice(0, 60), mask: (cs.maskImage || cs.webkitMaskImage || '').slice(0, 40), pe: cs.pointerEvents, bt: cs.borderTopWidth + ' ' + cs.borderTopColor, sh: cs.boxShadow.slice(0, 50), pos: cs.position, z: cs.zIndex,
         before: pe(b), after: pe(a),
       };
     };
