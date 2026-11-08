@@ -2,7 +2,7 @@
 // 行為 = 時段 + 真實資料（班表、生理期、睡眠、紀念日）+ 需求值 + 隨機 + 每天的小故事（home/data/island/YYYY-MM-DD.json）。
 // 座標都是房間原圖（1536×1024）的像素，畫面依寬度縮放；腳的位置 = (x, y)，y 越大越前面。
 
-const V = '0.10.0';
+const V = '0.10.1';
 const IMG = (n) => `room/${n}.webp?v=${V}`;
 const ROOM_W = 1536;
 const ROOM_H = 1024;
@@ -175,9 +175,33 @@ export function createRoom(root, api) {
     let pool = def.text;
     if (a === zhan && tang.out) pool = pool.filter((x) => !x.includes('小棠')).concat(pool.every((x) => x.includes('小棠')) ? ['湛湛一個人安靜地做自己的事'] : []);
     a.text = opts.text || pick(pool);
-    const target = a.act.spot ? SPOTS[a.act.spot] : pick(FLOOR);
+    let target = a.act.spot ? { ...SPOTS[a.act.spot] } : { x: pick(FLOOR)[0], y: pick(FLOOR)[1] };
+    target = avoidOverlap(a, target);
     walkTo(a, target, !!opts.run);
+    linkBunnies(a, a.text);
     addLog(a.text, !!opts.star);
+  }
+  // 兩個人不要擠在同一個點
+  function avoidOverlap(a, t) {
+    const other = a === zhan ? tang : zhan;
+    if (other.out) return t;
+    const op = other.path.length ? other.path[other.path.length - 1] : { x: other.x, y: other.y };
+    if (Math.hypot(op.x - t.x, op.y - t.y) < 70) return { x: t.x + (t.x > 900 ? -95 : 95), y: t.y + 12 };
+    return t;
+  }
+  // 句子裡提到澄澄、澎澎：讓兔子真的過去，或被抱起來
+  function linkBunnies(a, text) {
+    const t = String(text || '');
+    const list = [];
+    if (t.includes('澄澄')) list.push(cheng);
+    if (t.includes('澎澎')) list.push(peng);
+    if (!list.length && /兔兔|兔子/.test(t) && /摸|抱|餵|陪/.test(t)) list.push(pick([cheng, peng]));
+    for (const b of list) {
+      b.lockedBy = a;
+      b.lockUntil = a.until;
+      b.mode = /抱/.test(t) ? 'hold' : 'near';
+      b.nearSet = false;
+    }
   }
   function goOut(a, text, sec, star = false) {
     a.act = { key: 'out', sprite: null, bub: '', fx: {}, spot: 'door', leaving: true };
@@ -348,6 +372,12 @@ export function createRoom(root, api) {
       }
       // 兔子
       for (const b of [cheng, peng]) {
+        if (b.lockedBy) {
+          const a = b.lockedBy;
+          if (now > b.lockUntil || a.out || a.act == null) { b.lockedBy = null; b.mode = null; walkTo(b, pick(PEN)); b.speed = 160; continue; }
+          if (b.mode === 'near' && !b.nearSet && arrived(a)) { walkTo(b, { x: a.x + (a.x > 700 ? -70 : 70), y: a.y + 18 }); b.speed = 200; b.nearSet = true; }
+          continue;
+        }
         if (arrived(b) && chance(0.25)) {
           const free = !tang.out || !zhan.out ? chance(0.25) : false;
           walkTo(b, free ? pick(FLOOR) : pick(PEN));
@@ -396,6 +426,18 @@ export function createRoom(root, api) {
     else if (walking) name = a.back ? (a === tang ? (isNight() ? 'tang-bunny' : 'tang-back') : (isNight() ? 'zhan-wolf' : 'zhan-back')) : sprite(a, a === tang ? 'tang-normal' : 'zhan-normal');
     else name = sprite(a, a.act?.sprite);
     if (a.sprite !== name) { a.sprite = name; a.img.src = IMG(name); }
+    // 被抱著的兔子：貼在抱的人胸前
+    if (a.mode === 'hold' && a.lockedBy && !a.lockedBy.out) {
+      const o = a.lockedBy;
+      const oh = (o.h) * scale;
+      a.x = o.x; a.y = o.y; a.path = [];
+      a.img.style.height = `${a.h * scale}px`;
+      a.el.style.transform = `translate(${(o.x + 4) * scale}px, ${o.y * scale - oh * 0.38}px)`;
+      a.img.style.transform = 'translateX(-50%) translateY(-100%) rotate(-8deg)';
+      a.el.style.zIndex = String(Math.round(o.y) + 1);
+      a.bub.textContent = '';
+      return;
+    }
     const lying = name === 'tang-sleep';
     const h = (lying ? a.h * 0.75 : a.h) * scale;
     const bob = walking ? Math.abs(Math.sin(a.walkT)) * (a.speed > 200 ? 9 : 5) * scale * 3 : Math.sin(now * 2 + a.x) * 1.2;
