@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十套顏色、粉圓字體、兔兔底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.6.6
+// @version      0.6.7
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -195,8 +195,8 @@ html[data-xt-bg="image"]::before, html[data-xt-bg="image"]::after {
 }
 html[data-xt-bg="image"]::before {
   inset: 0;
-  background-image: var(--xt-bg-img, none); background-size: cover; background-repeat: no-repeat;
-  background-position: var(--xt-bg-pos, center);
+  background-image: var(--xt-bg-img, none); background-size: var(--xt-bsize, cover); background-repeat: no-repeat;
+  background-position: var(--xt-hpos, var(--xt-bg-pos, center));
 }
 html[data-xt-bg="image"]::after {
   inset: 0;
@@ -206,6 +206,7 @@ html[data-xt-bg="image"]::after {
 html[data-xt-bg="image"] [data-xt-band], html[data-xt-bg="image"] [data-xt-ground] {
   border-color: transparent !important; box-shadow: none !important;
 }
+html[data-xt-bg="image"] [data-xt-line] { opacity: 0 !important; }
 /* 原本鋪底紋的那幾層改成透明，讓圖透出來 */
 html[data-xt-bg="image"] :is(.tiles-shell, [data-sim-native-ground], [data-xt-ground], body) {
   background: transparent !important;
@@ -216,19 +217,19 @@ html[data-xt-bg="image"] :is(.tiles-shell, [data-sim-native-ground], [data-xt-gr
   html[data-xt-bg="image"] [data-xt-band] {
     background-color: transparent !important;
     background-image: linear-gradient(var(--xt-veil), var(--xt-veil)), var(--xt-bg-img, none) !important;
-    background-size: auto, cover !important;
-    background-position: 0 0, var(--xt-bg-pos, center) !important;
+    background-size: auto, var(--xt-bsize, cover) !important;
+    background-position: 0 0, var(--xt-bpos, var(--xt-bg-pos, center)) !important;
     background-repeat: no-repeat !important;
-    background-attachment: fixed, fixed !important;
+    background-attachment: scroll, var(--xt-battach, fixed) !important;
   }
   html[data-xt-bg="image"] [data-xt-band-before]::before,
   html[data-xt-bg="image"] [data-xt-band-after]::after {
     background-color: transparent !important;
     background-image: linear-gradient(var(--xt-veil), var(--xt-veil)), var(--xt-bg-img, none) !important;
-    background-size: auto, cover !important;
-    background-position: 0 0, var(--xt-bg-pos, center) !important;
+    background-size: auto, var(--xt-bsize, cover) !important;
+    background-position: 0 0, var(--xt-bpos, var(--xt-bg-pos, center)) !important;
     background-repeat: no-repeat !important;
-    background-attachment: fixed, fixed !important;
+    background-attachment: scroll, var(--xt-battach, fixed) !important;
   }
   html:not([data-xt-bg="image"]) [data-xt-band] {
     background-color: var(--xt-page) !important;
@@ -483,6 +484,8 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
     });
     probeAroundComposer();
     scanSiblings();
+    hideThinLines();
+    queuePlace();
   }
 
   // 輸入框左右兩邊和下面直接點幾個點，看是哪幾層蓋在背景上面（有些底不是輸入框的上層，是旁邊的兄弟或 ::before）
@@ -532,7 +535,7 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
   // 🐰 選單最下面的「複製診斷」：把輸入框附近每一層的樣子複製起來，貼給湛湛看
   function diagnose() {
     const box = composerBox();
-    const out = { v: '0.6.6', w: innerWidth, h: innerHeight, mode: state.bg, layers: [] };
+    const out = { v: '0.6.7', w: innerWidth, h: innerHeight, mode: state.bg, layers: [] };
     if (!box) { out.err = 'no composer'; return JSON.stringify(out); }
     const r = box.getBoundingClientRect();
     out.box = [r.left, r.top, r.width, r.height].map(Math.round);
@@ -550,7 +553,8 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
     };
     const seen = new Set();
     const add = (el, how) => { if (seen.has(el) || el === html || el === document.body) return; seen.add(el); out.layers.push(Object.assign({ how }, brief(el))); };
-    for (const [x, y] of [[r.left - 30, r.top + r.height / 2], [r.right + 30, r.top + r.height / 2], [r.left - 30, innerHeight - 3]]) {
+    for (const [x, y] of [[r.left - 30, r.top + r.height / 2], [r.right + 30, r.top + r.height / 2], [r.left - 30, innerHeight - 3],
+                          [r.left - 40, r.top - 1], [r.left - 40, r.top - 3], [r.left - 40, r.top - 5], [r.left - 40, r.top + 1]]) {
       if (x >= 0 && x < innerWidth && document.elementsFromPoint) document.elementsFromPoint(x, y).forEach(el => add(el, 'pt'));
     }
     document.querySelectorAll(FADE_SEL).forEach(el => {
@@ -575,6 +579,26 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
     try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
     t.remove();
     return ok;
+  }
+
+  // 輸入框上緣附近的細線（像 h-px 的分隔線）：在上緣上下幾個像素掃一遍，扁扁長長的就藏起來
+  function hideThinLines() {
+    if (!document.elementsFromPoint) return;
+    const box = composerBox();
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    if (!r.width) return;
+    const xs = [r.left - 40, r.right + 40, r.left / 2, r.left + 6];
+    for (let dy = -8; dy <= 2; dy++) for (const x of xs) {
+      const y = r.top + dy;
+      if (x < 0 || x >= innerWidth || y < 0) continue;
+      for (const el of document.elementsFromPoint(x, y)) {
+        if (el === html || el === document.body) break;
+        if (el.closest('#xt-skin-panel, #xt-skin-tab') || box.contains(el)) continue;
+        const er = el.getBoundingClientRect();
+        if (er.height <= 4 && er.width >= r.width) el.setAttribute('data-xt-line', '');
+      }
+    }
   }
 
   function probeAroundComposer() {
@@ -643,6 +667,41 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
   }
   function readPhoto() { try { return localStorage.getItem(PHOTO_KEY); } catch (e) { return null; } }
 
+  // 背景圖的實際大小和位置算成像素：輸入框附近那幾層照這個對齊，
+  // 不用 background-attachment: fixed（它在有 contain 的捲動區裡會跑掉，留下一條接縫）
+  let geom = null;
+  function measureImage(src, pos) {
+    const im = new Image();
+    im.onload = () => { geom = { iw: im.naturalWidth, ih: im.naturalHeight, pos }; placeBands(); };
+    im.src = src;
+  }
+  function placeBands() {
+    if (!geom || state.bg !== 'image' || !geom.iw) {
+      html.style.removeProperty('--xt-bsize'); html.style.removeProperty('--xt-hpos'); html.style.removeProperty('--xt-battach');
+      return;
+    }
+    const vw = innerWidth, vh = innerHeight;
+    const k = Math.max(vw / geom.iw, vh / geom.ih);
+    const W = geom.iw * k, H = geom.ih * k;
+    const words = String(geom.pos).split(/\s+/);
+    const fx = { left: 0, right: 1 }[words[0]] ?? 0.5;
+    const fy = { top: 0, bottom: 1 }[words[1] || words[0]] ?? 0.5;
+    const px = (vw - W) * fx, py = (vh - H) * fy;
+    html.style.setProperty('--xt-bsize', `${W}px ${H}px`);
+    html.style.setProperty('--xt-hpos', `${px}px ${py}px`);
+    html.style.setProperty('--xt-battach', 'scroll');
+    document.querySelectorAll('[data-xt-band], [data-xt-band-before], [data-xt-band-after]').forEach(el => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty('--xt-bpos', `${px - r.left}px ${py - r.top}px`);
+      if (bandRO && !el.__xtObserved) { el.__xtObserved = true; bandRO.observe(el); }
+    });
+  }
+  let placeQueued = false;
+  const queuePlace = () => { if (placeQueued) return; placeQueued = true; requestAnimationFrame(() => { placeQueued = false; placeBands(); }); };
+  const bandRO = typeof ResizeObserver === 'function' ? new ResizeObserver(queuePlace) : null;
+  window.addEventListener('resize', queuePlace);
+  document.addEventListener('scroll', queuePlace, { capture: true, passive: true });
+
   async function applyBg() {
     const token = ++bgToken;
     if (state.bg !== 'image') { html.style.removeProperty('--xt-bg-img'); return; }
@@ -661,6 +720,7 @@ html[data-xt-bg="image"] #xt-skin-panel .xt-img-only { display: block; }
     if (token !== bgToken) return;
     html.style.setProperty('--xt-bg-img', 'url("' + src + '")');
     html.style.setProperty('--xt-bg-pos', pos);
+    measureImage(src, pos);
     note('');
   }
   portrait.addEventListener ? portrait.addEventListener('change', applyBg) : portrait.addListener(applyBg);
