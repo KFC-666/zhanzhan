@@ -15,31 +15,8 @@ root.innerHTML = `<div class="r3d">
     <div class="r3d-bubble" id="bubZ"></div>
     <div class="r3d-bubble" id="bubT"></div>
   </div>
-  <div class="r3d-lines" aria-live="polite">
-    <p><i class="r3d-dot z"></i><span id="lineZ">湛湛在房間裡</span></p>
-    <p><i class="r3d-dot t"></i><span id="lineT">小棠在房間裡</span></p>
-  </div>
-  <div class="r3d-row" role="group" aria-label="互動">
-    <span class="r3d-label">互動</span>
-    <button data-pair="hug">抱抱</button><button data-pair="pat">摸頭</button><button data-pair="hold">牽手</button><button data-pair="kiss">親親</button><button id="pr-story">✨ 小故事</button>
-  </div>
-  <div class="r3d-row" role="group" aria-label="場景">
-    <span class="r3d-label">場景</span>
-    <button data-scene="auto" aria-pressed="true">自己過日子</button><button data-scene="sofa" aria-pressed="false">窩沙發</button><button data-scene="eat" aria-pressed="false">吃飯</button><button data-scene="game" aria-pressed="false">打電動</button><button data-scene="bunny" aria-pressed="false">摸兔兔</button><button data-scene="sleep" aria-pressed="false">睡覺</button>
-  </div>
-  <div class="r3d-row" role="group" aria-label="鏡頭">
-    <span class="r3d-label">鏡頭</span>
-    <button data-cam="room" aria-pressed="true">整間房間</button><button data-cam="tang" aria-pressed="false">跟著小棠</button><button data-cam="zhan" aria-pressed="false">跟著湛湛</button>
-  </div>
-  <div class="r3d-row" role="group" aria-label="光線">
-    <span class="r3d-label">光線</span>
-    <button data-light="auto" aria-pressed="true">跟著時間</button><button data-light="day" aria-pressed="false">白天</button><button data-light="dusk" aria-pressed="false">傍晚</button><button data-light="night" aria-pressed="false">晚上</button>
-  </div>
-  <div class="r3d-row" role="group" aria-label="人物">
-    <span class="r3d-label">人物</span>
-    <button data-char="model" aria-pressed="true">3D 模型</button><button data-char="chibi" aria-pressed="false">饅頭版</button>
-  </div>
-  <p class="r3d-note">拖人到家具上，他就會走過去。點床頭燈、電腦螢幕、窗簾可以開關，點兔兔會餵牧草。上班日小棠會出門，生理期湛湛會煮紅豆湯，每天的小故事到時間會演出來。</p>
+  <div class="room-status" id="room-status"></div>
+  <div class="room-log card"><h2>今天的小房間</h2><div id="room-log"></div></div>
 </div>
 `;
 const $id = (id) => root.querySelector('#' + id);
@@ -858,6 +835,7 @@ function goTo(c, actKey, forcedSpot, customSpot) {
 
 // ---------- 自動過日子 ----------
 let scene_ = 'auto';
+let pairLock = 0;
 function pickWeighted(list) {
   const tot = list.reduce((s, [, w]) => s + w, 0);
   let r = Math.random() * tot;
@@ -879,6 +857,13 @@ function chooseNext(c) {
     if (LIFE.period) w.push(['nap', 4]);
     w = w.filter(([k]) => k !== c.act || k === 'phone');
     return goTo(c, pickWeighted(w));
+  }
+  // 兩個人自己會抱抱、牽手、摸頭、親親（跟 2.5D 一樣自由互動）
+  const nowMs = performance.now();
+  if (!other.out && hf >= 7 && hf < 23.5 && nowMs > pairLock && nowMs > other.manualUntil && settled(other) && other.act !== 'pair'
+      && !(other.spot && other.spot.pose === 'lie') && Math.random() < 0.22) {
+    pairLock = nowMs + 120000;
+    return startPair(pickWeighted([['hug', 3], ['hold', 3], ['pat', 3], ['kiss', 1]]));
   }
   // 湛湛會想黏著小棠
   const t = other.out ? null : other.act;
@@ -917,8 +902,39 @@ function setScene(name) {
 // ---------- 文字 ----------
 const lineZ = $id('lineZ'), lineT = $id('lineT');
 const lines = { zhan: '', tang: '' };
-function setLine(c, text) { lines[c.key] = text; }
+// App 版用 2.5D 的顯示方式：上面兩行狀態、下面「今天的小房間」紀錄
+const statusEl = $id('room-status');
+const logEl = $id('room-log');
+const roomLog = [];
+const escHTML = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+function hhmmNow() { const { h, m } = taipeiNow(); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+function addLog(text, star = false, time = hhmmNow()) {
+  if (!logEl || !text) return;
+  if (roomLog.slice(0, 3).some((l) => l.text === text)) return;
+  roomLog.unshift({ time, text, star });
+  roomLog.length = Math.min(roomLog.length, 12);
+  logEl.innerHTML = roomLog.map((l) => `<div class="rl ${l.star ? 'star' : ''}"><b>${l.time}</b>${l.star ? '✨ ' : ''}${escHTML(l.text)}</div>`).join('');
+}
+function setLine(c, text) { lines[c.key] = text; if (text && !text.startsWith(WALK_TEXT[c.key])) addLog(text); }
+let lastTogether = '';
+function renderStatus() {
+  const together = togetherText();
+  if (together && together !== lastTogether) addLog(together);
+  lastTogether = together;
+  if (!statusEl) return;
+  let html;
+  if (storyLine && clock.elapsedTime < storyLine.until) html = `<span>${escHTML(storyLine.text)}</span>`;
+  else if (together) html = `<span>${escHTML(together)}</span>`;
+  else {
+    const zt = zhan.out ? '出門中' : (lines.zhan || '…');
+    const tt = tang.out ? (workingNow() ? '上班中' : '出門中') : (lines.tang || '…');
+    html = `<span>湛湛｜${escHTML(zt)}</span><span>小棠｜${escHTML(tt)}</span>`;
+  }
+  if (html !== statusEl._last) { statusEl.innerHTML = html; statusEl._last = html; }
+}
 function renderLines() {
+  renderStatus();
+  if (!lineZ) return;
   if (storyLine && clock.elapsedTime < storyLine.until) {
     lineZ.textContent = storyLine.text; lineZ.className = 'both';
     lineT.textContent = tang.out ? lines.tang + '（湛湛在家）' : (togetherText() || lines.tang); lineT.className = '';
@@ -1461,6 +1477,7 @@ function comeBack(c, text) {
 }
 function playStory(e) {
   if (!e) return;
+  addLog(e.text, true, e.time && /^\d/.test(e.time) ? e.time : hhmmNow());
   storyLine = { text: '✨ ' + e.text, until: clock.elapsedTime + 16 };
   const who = e.who === 'zhan' ? [zhan] : e.who === 'tang' ? [tang] : e.who === 'both' ? [zhan, tang] : [];
   const act = e.act;
@@ -1494,7 +1511,7 @@ function checkLife() {
     if (storyDone.has(i)) return;
     const t = toMin(e.time);
     if (now >= t && now <= t + 25) { storyDone.add(i); storyCursor = i + 1; playStory(e); }
-    else if (now > t + 25) storyDone.add(i);
+    else if (now > t + 25) { storyDone.add(i); addLog(e.text, true, e.time); }
   });
 }
 function nextStory() {
@@ -1508,7 +1525,7 @@ root.querySelectorAll('[data-scene]').forEach(b => b.addEventListener('click', (
 root.querySelectorAll('[data-pair]').forEach(b => b.addEventListener('click', () => startPair(b.dataset.pair)));
 root.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => setCam(b.dataset.cam)));
 root.querySelectorAll('[data-char]').forEach(b => b.addEventListener('click', () => { charMode = b.dataset.char; applyCharMode(); }));
-$id('pr-story').addEventListener('click', nextStory);
+$id('pr-story')?.addEventListener('click', nextStory);
 root.querySelectorAll('[data-light]').forEach(b => b.addEventListener('click', () => {
   lightMode = b.dataset.light; currentLight = '';
   root.querySelectorAll('[data-light]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
