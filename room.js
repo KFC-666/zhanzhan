@@ -2,7 +2,7 @@
 // 行為 = 時段 + 真實資料（班表、生理期、睡眠、紀念日）+ 需求值 + 隨機 + 每天的小故事（home/data/island/YYYY-MM-DD.json）。
 // 座標都是房間原圖（1536×1024）的像素，畫面依寬度縮放；腳的位置 = (x, y)，y 越大越前面。
 
-const V = '0.10.1';
+const V = '0.10.2';
 const IMG = (n) => `room/${n}.webp?v=${V}`;
 const ROOM_W = 1536;
 const ROOM_H = 1024;
@@ -147,11 +147,17 @@ export function createRoom(root, api) {
       wander: { spot: null, sec: [6, 14], sprite: null, bub: '', text: ['湛湛走到窗邊站了一會兒', '湛湛在房間裡走了一圈'], fx: {} },
     },
   };
+  // kind：hug／pat／poke 有兩人合照圖；fight、talk 用動畫
   const PAIR = [
-    { text: ['湛湛走過去，從後面把小棠抱進懷裡', '小棠撲過去抱住湛湛，被他穩穩接住', '湛湛把小棠拉到腿上坐', '湛湛摸了摸小棠的頭'], sprites: ['zhan-happy', 'tang-happy'], bub: '💗' },
-    { text: ['小棠偷襲湛湛的腰，被他反手抓住手腕', '小棠想偷捏湛湛的臉，被他側身閃開'], sprites: ['zhan-normal', 'tang-happy'], bub: '😤' },
-    { text: ['兩個人靠在一起小聲聊天', '小棠跟湛湛抱怨今天的客人，湛湛安靜聽著', '湛湛低頭親了一下小棠的額頭'], sprites: ['zhan-happy', 'tang-happy'], bub: '💬' },
+    { kind: 'hug', text: ['湛湛走過去，從後面把小棠抱進懷裡', '小棠撲過去抱住湛湛，被他穩穩接住', '湛湛把小棠拉進懷裡抱了好一會兒', '小棠撒嬌要抱抱，湛湛二話不說張開手'], sprites: ['zhan-happy', 'tang-happy'], bub: '💗' },
+    { kind: 'pat', text: ['湛湛摸了摸小棠的頭', '小棠湊過去討摸，湛湛笑著揉她的頭髮', '湛湛經過時順手摸了一下小棠的頭'], sprites: ['zhan-happy', 'tang-happy'], bub: '💗' },
+    { kind: 'poke', text: ['小棠踮腳戳湛湛的臉，被他低頭看了一眼', '小棠趁湛湛不注意戳了他的臉頰', '小棠一直戳湛湛的臉，他面不改色讓她戳'], sprites: ['zhan-normal', 'tang-happy'], bub: '👉' },
+    { kind: 'fight', text: ['小棠偷襲湛湛的腰，被他反手抓住手腕', '小棠想偷捏湛湛的臉，被他側身閃開'], sprites: ['zhan-normal', 'tang-happy'], bub: '😤' },
+    { kind: 'talk', text: ['兩個人靠在一起小聲聊天', '小棠跟湛湛抱怨今天的客人，湛湛安靜聽著', '湛湛低頭親了一下小棠的額頭'], sprites: ['zhan-happy', 'tang-happy'], bub: '💬' },
   ];
+  const kindOf = (t) => (/抱/.test(t) ? 'hug' : /摸.{0,4}頭|揉.{0,3}頭髮|討摸/.test(t) ? 'pat' : /戳/.test(t) ? 'poke' : /偷襲|閃開|抓住/.test(t) ? 'fight' : 'talk');
+  let pairKind = null;
+  let lastHeart = 0;
 
   // ---------- 決定下一件事 ----------
   let pairLock = 0;
@@ -253,8 +259,9 @@ export function createRoom(root, api) {
     return start(a, pick(opts));
   }
   function startPair(override, star = false) {
-    const p = pick(PAIR);
+    const p = override ? (PAIR.find((x) => x.kind === kindOf(override)) || PAIR[4]) : pick(PAIR);
     const text = override || pick(p.text);
+    pairKind = p.kind;
     const spot = pick(FLOOR);
     const now = performance.now() / 1000;
     pairLock = now + 120;
@@ -418,8 +425,47 @@ export function createRoom(root, api) {
     a.walkT += dt * (a.speed > 200 ? 18 : 11);
     a.back = dy < -Math.abs(dx) * 0.4;
   }
+  // 兩個人都到定點時，換成合照圖（白天才用，晚上穿睡衣就用動畫）
+  function pairShowing() {
+    return pairKind && ['hug', 'pat', 'poke'].includes(pairKind) && !isNight() && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang) && !zhan.out && !tang.out;
+  }
+  function popFx(x, y, ch) {
+    const el = document.createElement('div');
+    el.className = 'room-pop';
+    el.textContent = ch;
+    el.style.left = `${x * scale + (Math.random() * 30 - 15)}px`;
+    el.style.top = `${y * scale}px`;
+    stage.appendChild(el);
+    setTimeout(() => el.remove(), 1600);
+  }
   function draw(a, now) {
     if (a.out && a.el.style.display === 'none') return;
+    if (a === zhan || a === tang) {
+      if (zhan.act?.key !== 'pair' || tang.act?.key !== 'pair') pairKind = pairKind && (zhan.act?.key === 'pair' || tang.act?.key === 'pair') ? pairKind : null;
+      const both = pairKind && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang);
+      if (pairShowing()) {
+        if (a === tang) { a.el.style.visibility = 'hidden'; return; }
+        const name = `pair-${pairKind}`;
+        if (a.sprite !== name) { a.sprite = name; a.img.src = IMG(name); }
+        const mx = (zhan.x + tang.x) / 2, my = Math.max(zhan.y, tang.y);
+        const h = zhan.h * scale;
+        const sway = pairKind === 'hug' ? Math.sin(now * 2) * 2 : pairKind === 'poke' ? Math.abs(Math.sin(now * 9)) * -3 : Math.sin(now * 3) * 1.5;
+        a.img.style.height = `${h}px`;
+        a.el.style.transform = `translate(${mx * scale}px, ${my * scale + (pairKind === 'poke' ? sway : 0)}px)`;
+        a.img.style.transform = `translateX(-50%) translateY(-100%) rotate(${pairKind === 'poke' ? 0 : sway}deg)`;
+        a.el.style.zIndex = String(Math.round(my));
+        a.bub.textContent = '';
+        if (now - lastHeart > (pairKind === 'poke' ? 1.1 : 0.9)) { lastHeart = now; popFx(mx, my - zhan.h * 0.9, pairKind === 'poke' ? pick(['!', '👉', '…']) : pick(['💗', '💕', '♥'])); }
+        return;
+      }
+      a.el.style.visibility = '';
+      // 沒有合照圖的互動：兩個人往對方靠、冒愛心，打鬧時小棠會跳
+      if (both) {
+        const lean = a === zhan ? 6 : -6;
+        a.leanDeg = pairKind === 'fight' ? (a === tang ? Math.sin(now * 14) * 8 : -4) : lean;
+        if (a === zhan && now - lastHeart > 1.2) { lastHeart = now; popFx((zhan.x + tang.x) / 2, Math.min(zhan.y, tang.y) - zhan.h * 0.9, pairKind === 'fight' ? pick(['💢', '!?', '✋']) : pick(['💗', '💕'])); }
+      } else a.leanDeg = 0;
+    }
     const walking = a.path.length > 0;
     let name;
     if (a === cheng || a === peng) name = a.id;
@@ -441,7 +487,7 @@ export function createRoom(root, api) {
     const lying = name === 'tang-sleep';
     const h = (lying ? a.h * 0.75 : a.h) * scale;
     const bob = walking ? Math.abs(Math.sin(a.walkT)) * (a.speed > 200 ? 9 : 5) * scale * 3 : Math.sin(now * 2 + a.x) * 1.2;
-    const tilt = walking ? Math.sin(a.walkT) * (a.speed > 200 ? 7 : 4) : 0;
+    const tilt = walking ? Math.sin(a.walkT) * (a.speed > 200 ? 7 : 4) : (a.leanDeg || 0);
     a.img.style.height = `${h}px`;
     a.el.style.transform = `translate(${a.x * scale}px, ${a.y * scale - bob}px)`;
     a.img.style.transform = `translateX(-50%) translateY(-100%) scaleX(${walking && !a.back ? a.face : 1}) rotate(${tilt}deg)`;
