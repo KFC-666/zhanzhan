@@ -1,6 +1,6 @@
 
-const VERSION = '0.11.1';
-import { createRoom } from './room.js?v=0.11.1';
+const VERSION = '0.12.0';
+import { createRoom } from './room.js?v=0.12.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -9,8 +9,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.11.1`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.11.1" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.12.0`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.12.0" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -1597,6 +1597,18 @@ $('#us-root').addEventListener('click', async (e) => {
   if (tb) { theme.name = tb.dataset.theme; LS.set('zh-theme', theme); applyTheme(); renderUs(); return; }
   const tm = e.target.closest('[data-tmode]');
   if (tm) { theme.mode = tm.dataset.tmode; LS.set('zh-theme', theme); applyTheme(); renderUs(); return; }
+  const bgb = e.target.closest('[data-bgmode], [data-pat], [data-bgimg], [data-veil]');
+  if (bgb) {
+    const d = bgb.dataset;
+    if (d.bgmode) theme.bg = d.bgmode;
+    if (d.pat) theme.pat = d.pat;
+    if (d.veil) theme.veil = d.veil;
+    if (d.bgimg) {
+      if (d.bgimg === 'photo' && (theme.img === 'photo' || !readBgPhoto())) { pickBgPhoto(); return; }
+      theme.img = d.bgimg;
+    }
+    LS.set('zh-theme', theme); applyTheme(); renderUs(); return;
+  }
   if (e.target.closest('#set-save')) {
     settings.token = $('#set-token').value.trim();
     settings.repo = $('#set-repo').value.trim() || 'KFC-666/xiaotang-space';
@@ -1783,16 +1795,71 @@ function pushCard() {
 // ================= 主題 =================
 const THEMES = {
   rose: { name: '粉灰', light: ['#fbf3f4', '#f6e6e9', '#ffffff', '#fdf0f2', '#f0d9de', '#4a3237', '#8a6d73', '#b39aa0', '#e8899b', '#d66a80', '#fbe0e6', '#f6c9d3', '#4a2a31', '#ffffff', '#3b3236', '#a07c84'],
-    dark: ['#1f1a1c', '#2a2225', '#2b2427', '#332a2e', '#43373c', '#f3e6e9', '#c7aab1', '#8e767c', '#e894a5', '#f0a8b7', '#46303a', '#7d4352', '#fff1f4', '#362d31', '#f3e6e9', '#c79fa8'] },
+    dark: ['#1f1a1c', '#2a2225', '#2b2427', '#332a2e', '#43373c', '#f3e6e9', '#c7aab1', '#8e767c', '#e894a5', '#f0a8b7', '#46303a', '#7d4352', '#fff1f4', '#362d31', '#f3e6e9', '#c79fa8'], h: ['#e48aa8', '#a9a1ab', '#e48aa8', '#8a7f88'] },
   milktea: { name: '奶茶', light: ['#f7f1ea', '#efe4d8', '#fffdfa', '#f6ede4', '#eadccd', '#4a3a30', '#8a7464', '#b3a090', '#c9858f', '#b5687a', '#f5dfdc', '#f0d3cc', '#4a2f2a', '#fffdfa', '#3e322b', '#a08070'],
-    dark: ['#1d1915', '#29231d', '#2a241e', '#332b24', '#43382e', '#f5ebe0', '#cdb9a6', '#8f7d6c', '#e6a6ad', '#eebac0', '#4a3530', '#6e4a44', '#fff3ee', '#332b24', '#f5ebe0', '#c8a898'] },
+    dark: ['#1d1915', '#29231d', '#2a241e', '#332b24', '#43382e', '#f5ebe0', '#cdb9a6', '#8f7d6c', '#e6a6ad', '#eebac0', '#4a3530', '#6e4a44', '#fff3ee', '#332b24', '#f5ebe0', '#c8a898'], h: ['#dc9aa3', '#b8a493', '#d99aa2', '#8c7d70'] },
   mist: { name: '霧藍', light: ['#eef2f6', '#e1e8ef', '#ffffff', '#eaf0f5', '#d8e1ea', '#2e3846', '#6a7a8c', '#9aa8b8', '#d48aa5', '#c96a8f', '#f6dde6', '#f3cfdc', '#43283a', '#ffffff', '#2e3846', '#8494a8'],
-    dark: ['#161a1f', '#1f252c', '#222931', '#2a323b', '#36404b', '#ecf2f8', '#b5c4d4', '#7d8a98', '#ef9fbd', '#f4b3cb', '#4a2e3d', '#6e3f55', '#fff0f6', '#2a323b', '#ecf2f8', '#a9b8c9'] },
+    dark: ['#161a1f', '#1f252c', '#222931', '#2a323b', '#36404b', '#ecf2f8', '#b5c4d4', '#7d8a98', '#ef9fbd', '#f4b3cb', '#4a2e3d', '#6e3f55', '#fff0f6', '#2a323b', '#ecf2f8', '#a9b8c9'], h: ['#e7a0b8', '#8f9fb0', '#e48aa8', '#7d8a98'] },
   lavender: { name: '薰衣草', light: ['#f4f1f8', '#e9e3f1', '#ffffff', '#f0ebf6', '#e2d9ee', '#3a2f48', '#7b6d8e', '#aa9dbc', '#a988cc', '#8f68b6', '#ece2f7', '#e3d3f3', '#3a2650', '#ffffff', '#3a2f48', '#9686ab'],
-    dark: ['#1a1720', '#241f2b', '#28232f', '#2f2a38', '#3d3647', '#f4eefc', '#cbbde0', '#8a7f9c', '#c7a6ea', '#d4baf0', '#3f3054', '#5b4378', '#f8f0ff', '#2f2a38', '#f4eefc', '#b4a3cc'] },
+    dark: ['#1a1720', '#241f2b', '#28232f', '#2f2a38', '#3d3647', '#f4eefc', '#cbbde0', '#8a7f9c', '#c7a6ea', '#d4baf0', '#3f3054', '#5b4378', '#f8f0ff', '#2f2a38', '#f4eefc', '#b4a3cc'], h: ['#d9a0c6', '#a99cbc', '#c98fb8', '#8a7f9c'] },
+  // 以下由 skins/tools/build_app_themes.py 從換膚的顏色換算
+  sakura: { name: '櫻花白', light: ['#fdf8f9', '#f9e9ed', '#ffffff', '#f9eef1', '#f8e2e8', '#35292e', '#6c5e63', '#b1a6aa', '#d9859f', '#cf6585', '#f6e0e6', '#fbe1e8', '#35292e', '#ffffff', '#35292e', '#8a606d'],
+    dark: ['#1e1719', '#3c2c31', '#2d2327', '#352a2e', '#563f45', '#f2e7ea', '#beadb2', '#74666b', '#d997ab', '#f3a9bf', '#49343a', '#4d3039', '#ffffff', '#2d2327', '#f2e7ea', '#ceacb6'], h: ['#f0a8bc', '#c9b9bf', '#eea2b7', '#8f8287'] },
+  peach: { name: '蜜桃杏', light: ['#fdf4ee', '#fae5dc', '#fffbf8', '#f9e8de', '#f8dfd4', '#3c2b23', '#745f54', '#b5a49c', '#d48472', '#c9654f', '#f5ddd5', '#fbd9c9', '#3c2b23', '#fffbf8', '#3c2b23', '#8e6152'],
+    dark: ['#1f1714', '#3d2c25', '#2e231d', '#372a23', '#573d33', '#f2e5dd', '#bdaa9f', '#74645b', '#da9780', '#f4a98f', '#4a342d', '#563428', '#ffffff', '#2e231d', '#f2e5dd', '#ceaa9a'], h: ['#f0a08a', '#c8ac9c', '#ee9f88', '#938076'] },
+  matcha: { name: '抹茶奶綠', light: ['#f5f6ec', '#e5ead9', '#fdfdf8', '#ebeedd', '#dee5d1', '#293024', '#5e6657', '#a4aa9c', '#829f6e', '#62864a', '#dde4d2', '#dfe9c9', '#293024', '#fdfdf8', '#293024', '#5f7053'],
+    dark: ['#171a14', '#2c3225', '#252a1f', '#2b3024', '#3d4733', '#e5eadd', '#aab29f', '#636a5a', '#a0ba80', '#b3d08f', '#363e2d', '#34442a', '#ffffff', '#252a1f', '#e5eadd', '#adbb9a'], h: ['#dba5a0', '#a9b39a', '#c99c97', '#7f8a74'] },
+  cocoa: { name: '焦糖可可', light: ['#efe4d8', '#e3d2c2', '#f9f2ea', '#e6d7c7', '#ddcab9', '#34241a', '#645042', '#a39284', '#b17d5d', '#a0603a', '#e2cfbf', '#e2c4a6', '#34241a', '#f9f2ea', '#34241a', '#765540'],
+    dark: ['#1c1410', '#37281d', '#2d2119', '#36271e', '#4e3828', '#ede1d4', '#bcaa99', '#716256', '#c59168', '#dca274', '#423024', '#4e3424', '#ffffff', '#2d2119', '#ede1d4', '#c6a88e'], h: ['#c98a6a', '#a88d77', '#d4936f', '#8c7766'] },
+  starry: { name: '夜空星藍', light: ['#eef1f8', '#d9dfee', '#fafbfe', '#e3e8f3', '#d0d8ea', '#1f273c', '#535b72', '#9aa1b2', '#6e83ba', '#4a64a8', '#d4daeb', '#d7def3', '#1f273c', '#fafbfe', '#1f273c', '#505e82'],
+    dark: ['#0f1424', '#22293f', '#1b2338', '#212a42', '#323b56', '#e1e5ef', '#a4abbd', '#586074', '#97a8d8', '#a9bcf0', '#2e364d', '#2a3560', '#ffffff', '#1b2338', '#e1e5ef', '#a6b0cc'], h: ['#9fb0dc', '#8e9ab8', '#c8d2f0', '#5f6b8c'] },
+  snow: { name: '雪兔白', light: ['#fafafa', '#ebeaea', '#ffffff', '#f2f1f0', '#e4e3e3', '#29292b', '#626265', '#aaaaab', '#bb8e98', '#a96f7c', '#ede4e6', '#f1e9ea', '#29292b', '#ffffff', '#29292b', '#77666c'],
+    dark: ['#18181a', '#313032', '#262628', '#2c2c2f', '#464546', '#e9e9e9', '#adadaf', '#646467', '#cdaeb4', '#e6c3c9', '#413a3d', '#3a3234', '#ffffff', '#262628', '#e9e9e9', '#beb4b7'], h: ['#e6c3c9', '#c4c0bd', '#d9b5bb', '#7d7a78'] },
+  gold: { name: '香檳金', light: ['#fbf7ee', '#f2e9d6', '#fffdf8', '#f4ecdb', '#efe4cc', '#382f1d', '#6d614c', '#b0a796', '#b99758', '#a67c2e', '#ede3cf', '#f1dfb4', '#382f1d', '#fffdf8', '#382f1d', '#7e6943'],
+    dark: ['#17140e', '#332a1a', '#282216', '#2f281b', '#4a3e24', '#efe7d4', '#bdb297', '#6d6452', '#caa95f', '#e2bd6a', '#403620', '#4a3b1c', '#ffffff', '#282216', '#efe7d4', '#c8b58a'], h: ['#d9b45e', '#bfae8c', '#d8b062', '#8a7a5a'] },
+  rosegold: { name: '玫瑰金', light: ['#fbf3f0', '#f4e3de', '#fffaf8', '#f5e6e0', '#f1dcd7', '#3a2927', '#725f5b', '#b3a4a0', '#c48a7f', '#b56d5f', '#f0ded9', '#f0cfc4', '#3a2927', '#fffaf8', '#3a2927', '#86635c'],
+    dark: ['#1d1615', '#3a2a27', '#2e2220', '#372927', '#533b37', '#efe1dd', '#bdaba6', '#726360', '#d29689', '#eba899', '#46332f', '#563631', '#ffffff', '#2e2220', '#efe1dd', '#cbaaa2'], h: ['#e0a593', '#c4aaa2', '#e09e8e', '#917c77'] },
 };
 const THEME_VARS = ['--bg', '--bg-tex', '--card', '--card-2', '--line', '--text', '--text-2', '--text-3', '--accent', '--accent-strong', '--accent-soft', '--me-bubble', '--me-text', '--zhan-bubble', '--zhan-text', '--act'];
-const theme = Object.assign({ name: 'rose', mode: 'auto' }, LS.get('zh-theme', {}));
+const theme = Object.assign({ name: 'rose', mode: 'auto', bg: 'pattern', pat: 'plain', img: 'us', veil: 'light' }, LS.get('zh-theme', {}));
+if (!THEMES[theme.name]) theme.name = 'rose';
+
+// ---- 背景：底紋（用主題的愛心色、兔兔色畫）或背景圖（跟 claude.ai 換膚同一套圖，放在 skin/bg/） ----
+const HEART = 'c-3-5-11-3-10 3 1 4 10 9 10 9s9-5 10-9c1-6-7-8-10-3z';
+const pHeart = (x, y, k) => `<path transform="translate(${x} ${y}) scale(${k})" d="M0 0${HEART}"/>`;
+const pStar = (x, y, r) => {
+  let d = '';
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 5 * i - Math.PI / 2, rr = i % 2 ? r * 0.45 : r;
+    d += (i ? 'L' : 'M') + (x + rr * Math.cos(a)).toFixed(1) + ' ' + (y + rr * Math.sin(a)).toFixed(1);
+  }
+  return `<path d="${d}z"/>`;
+};
+const pFlower = (x, y, r) => Array.from({ length: 5 }, (_, i) => {
+  const a = Math.PI * 2 / 5 * i - Math.PI / 2;
+  return `<circle cx="${(x + r * Math.cos(a)).toFixed(1)}" cy="${(y + r * Math.sin(a)).toFixed(1)}" r="${(r * 0.85).toFixed(1)}"/>`;
+}).join('');
+const pCarrot = (x, y, rot) => `<g transform="translate(${x} ${y}) rotate(${rot})"><path class="h" d="M-6 0Q0-4 6 0L1 24Q0 26-1 24Z"/><g class="b"><ellipse cx="-4" cy="-6" rx="2.2" ry="6" transform="rotate(-25 -4 -6)"/><ellipse cx="0" cy="-8" rx="2.2" ry="7"/><ellipse cx="4" cy="-6" rx="2.2" ry="6" transform="rotate(25 4 -6)"/></g></g>`;
+const PATTERNS = [
+  ['plain', '小圓點', (h, b) => `<g fill="${b}" fill-opacity="0.22"><circle cx="32" cy="16" r="2.6"/><circle cx="112" cy="96" r="2"/><circle cx="112" cy="16" r="2.6"/><circle cx="32" cy="96" r="2"/></g>`],
+  ['bunny', '兔兔', (h, b) => `<g fill="${h}" fill-opacity="0.32">${pHeart(30, 34, 1)}${pHeart(118, 112, 0.7)}</g><g fill="${b}" fill-opacity="0.32"><ellipse cx="112" cy="20" rx="3.2" ry="9"/><ellipse cx="121" cy="20" rx="3.2" ry="9"/><circle cx="116.5" cy="33" r="9"/><ellipse cx="35.5" cy="116.5" rx="8" ry="3" transform="rotate(-12 35.5 116.5)"/><ellipse cx="52.5" cy="116.5" rx="8" ry="3" transform="rotate(12 52.5 116.5)"/><circle cx="44" cy="124" r="9"/></g>`],
+  ['heart', '愛心', (h, b) => `<g fill="${h}" fill-opacity="0.34">${pHeart(40, 30, 1.3)}${pHeart(120, 110, 1.3)}</g><g fill="${b}" fill-opacity="0.34">${pHeart(120, 32, 0.7)}${pHeart(40, 112, 0.7)}${pHeart(80, 72, 0.5)}</g>`],
+  ['star', '星星', (h, b) => `<g fill="${h}" fill-opacity="0.36">${pStar(36, 40, 11)}${pStar(118, 116, 9)}</g><g fill="${b}" fill-opacity="0.36"><path d="M118 28a12 12 0 1 0 9 20a9 9 0 1 1-9-20z"/><circle cx="72" cy="86" r="2.2"/><circle cx="20" cy="130" r="1.8"/><circle cx="148" cy="76" r="1.8"/><circle cx="84" cy="14" r="1.6"/></g>`],
+  ['flower', '小花', (h, b) => `<g fill="${h}" fill-opacity="0.30">${pFlower(40, 40, 7)}${pFlower(120, 120, 7)}</g><g fill="${b}" fill-opacity="0.34"><circle cx="40" cy="40" r="3"/><circle cx="120" cy="120" r="3"/>${pFlower(120, 38, 4)}${pFlower(38, 120, 4)}</g>`],
+  ['dots', '圓點', (h, b) => `<g fill="${h}" fill-opacity="0.30"><circle cx="40" cy="40" r="9"/><circle cx="120" cy="120" r="9"/></g><g fill="${b}" fill-opacity="0.30"><circle cx="120" cy="40" r="5"/><circle cx="40" cy="120" r="5"/></g>`],
+  ['check', '格紋', (h, b) => `<g fill="${h}" fill-opacity="0.13"><rect x="0" y="0" width="160" height="40"/><rect x="0" y="80" width="160" height="40"/></g><g fill="${b}" fill-opacity="0.16"><rect x="0" y="0" width="40" height="160"/><rect x="80" y="0" width="40" height="160"/></g>`],
+  ['carrot', '蘿蔔', (h, b) => `<style>.h{fill:${h};fill-opacity:.38}.b{fill:${b};fill-opacity:.42}</style>${pCarrot(40, 40, -30)}${pCarrot(120, 112, 25)}<g fill="${h}" fill-opacity="0.3">${pHeart(118, 30, 0.6)}${pHeart(36, 116, 0.6)}</g>`],
+];
+const patternUrl = (id, h, b) => {
+  const p = PATTERNS.find((x) => x[0] === id) || PATTERNS[0];
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">${p[2](h, b)}</svg>`)}")`;
+};
+const BG_IMGS = [['us', '我們'], ['sakura', '櫻花'], ['night', '星空'], ['bunny', '澄澄澎澎'], ['rain', '雨天'], ['home', '家裡'], ['gold', '金色晚霞']];
+const VEILS = [['clear', '清楚', 18], ['light', '淡', 40], ['mid', '中', 58], ['strong', '濃', 74]];
+const BG_PHOTO_KEY = 'zh-bg-photo';
+const bgSrc = (id, wide) => `skin/bg/${id}-${wide ? 'l' : 'p'}.jpg?v=${VERSION}`;
+const wideMQ = window.matchMedia('(min-aspect-ratio: 1/1)');
+function readBgPhoto() { try { return localStorage.getItem(BG_PHOTO_KEY); } catch { return null; } }
 const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
   const t = THEMES[theme.name] || THEMES.rose;
@@ -1802,15 +1869,64 @@ function applyTheme() {
   THEME_VARS.forEach((v, i) => root.style.setProperty(v, vals[i]));
   root.style.colorScheme = dark ? 'dark' : 'light';
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', vals[0]));
+  const hb = t.h || ['#e48aa8', '#a9a1ab', '#e48aa8', '#8a7f88'];
+  root.style.setProperty('--pat-h', dark ? hb[2] : hb[0]);
+  root.style.setProperty('--pat-b', dark ? hb[3] : hb[1]);
+  root.style.setProperty('--pattern', patternUrl(theme.pat, dark ? hb[2] : hb[0], dark ? hb[3] : hb[1]));
+  root.style.setProperty('--veil-pct', `${(VEILS.find((v) => v[0] === theme.veil) || VEILS[1])[2]}%`);
+  let img = 'none';
+  if (theme.bg === 'image') {
+    const src = theme.img === 'photo' ? readBgPhoto() : bgSrc(theme.img, wideMQ.matches);
+    if (src) img = `url("${src}")`;
+  }
+  root.style.setProperty('--bg-img', img);
+  root.dataset.bg = theme.bg === 'image' && img !== 'none' ? 'image' : 'pattern';
 }
 darkMQ.addEventListener?.('change', applyTheme);
+wideMQ.addEventListener?.('change', applyTheme);
 applyTheme();
 function themeCard() {
   return `<div class="card"><h2>主題</h2>
     <div class="theme-grid">${Object.entries(THEMES).map(([k, t]) => `<button data-theme="${k}" class="${theme.name === k ? 'on' : ''}">
       <span class="sw" style="background:linear-gradient(135deg, ${t.light[0]} 50%, ${t.dark[0]} 50%)"><i style="background:${t.light[9]}"></i></span>${t.name}</button>`).join('')}</div>
     <div class="seg" style="margin:12px 0 0">${[['auto', '跟著手機'], ['light', '淺色'], ['dark', '深色']].map(([k, l]) => `<button data-tmode="${k}" class="${theme.mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  </div>
+  <div class="card"><h2>背景</h2>
+    <div class="seg">${[['pattern', '底紋'], ['image', '背景圖']].map(([k, l]) => `<button data-bgmode="${k}" class="${theme.bg === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    ${theme.bg === 'image' ? `
+    <div class="bg-grid">${BG_IMGS.map(([k, l]) => `<button data-bgimg="${k}" class="${theme.img === k ? 'on' : ''}"><span style="background-image:url('${bgSrc(k, false)}')"></span>${l}</button>`).join('')}
+      <button data-bgimg="photo" class="${theme.img === 'photo' ? 'on' : ''}"><span class="ph" ${readBgPhoto() ? `style="background-image:url('${readBgPhoto()}')"` : ''}>${readBgPhoto() ? '' : '📷'}</span>我的照片</button></div>
+    <p class="muted" style="margin:10px 0 6px">霧面（越濃字越好讀）</p>
+    <div class="seg">${VEILS.map(([k, l]) => `<button data-veil="${k}" class="${theme.veil === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    ${theme.img === 'photo' ? '<p class="muted" style="margin:6px 0 0">再點一次「我的照片」可以換一張。</p>' : ''}` : `
+    <div class="pat-grid">${PATTERNS.map(([k, l]) => `<button data-pat="${k}" class="${theme.pat === k ? 'on' : ''}"><span style="background-image:${patternUrl(k, getComputedStyle(document.documentElement).getPropertyValue('--pat-h').trim() || '#e48aa8', getComputedStyle(document.documentElement).getPropertyValue('--pat-b').trim() || '#a9a1ab').replace(/"/g, "'")}"></span>${l}</button>`).join('')}</div>`}
   </div>`;
+}
+function pickBgPhoto() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = url; });
+      let saved = false;
+      for (const [max, q] of [[1800, 0.82], [1400, 0.75], [1000, 0.7]]) {
+        const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        try { localStorage.setItem(BG_PHOTO_KEY, c.toDataURL('image/jpeg', q)); saved = true; break; } catch { /* 太大，縮小再試 */ }
+      }
+      URL.revokeObjectURL(url);
+      if (!saved) { toast('照片太大存不下，換一張試試'); return; }
+      theme.bg = 'image'; theme.img = 'photo';
+      LS.set('zh-theme', theme); applyTheme(); renderUs();
+    } catch { toast('這張照片讀不出來，換一張試試'); }
+  };
+  input.click();
 }
 
 // ================= 自動更新 =================
