@@ -2,7 +2,7 @@
 // 行為 = 時段 + 真實資料（班表、生理期、睡眠、紀念日）+ 需求值 + 隨機 + 每天的小故事（home/data/island/YYYY-MM-DD.json）。
 // 座標都是房間原圖（1536×1024）的像素，畫面依寬度縮放；腳的位置 = (x, y)，y 越大越前面。
 
-const V = '0.11.1';
+const V = '0.12.1';
 const IMG = (n) => `room/${n}.webp?v=${V}`;
 const ROOM_W = 1536;
 const ROOM_H = 1024;

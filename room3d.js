@@ -520,8 +520,9 @@ const bunnies = [cheng, peng];
 // ---------- 3D 模型人物（第一代 TRELLIS 轉的，我自己綁的簡單骨架） ----------
 // 位置是從模型量出來的：高度正規化成 1、腳底 0、左右前後置中
 const RIG = {
-  tang: { height: 1.05, bz: -0.02, hipX: 0.075, hipY: 0.36, kneeY: 0.19, waistY: 0.45, chestY: 0.55, neckY: 0.635, headY: 0.70,
-    shoulder: [0.12, 0.575], elbow: [0.195, 0.495], tip: [0.29, 0.39], armR: 0.062, legR: 0.06, hairBackZ: -0.085, extraOut: 0.3 },
+  // 小棠：Hunyuan3D-2.1 版（2026/11/9）。第一代 TRELLIS 版留在 chars/tang_trellis.glb，數字是 hipY 0.36、shoulder [0.12, 0.575]、tip [0.29, 0.39]
+  tang: { height: 1.05, bz: -0.01, hipX: 0.078, hipY: 0.345, kneeY: 0.18, waistY: 0.44, chestY: 0.54, neckY: 0.63, headY: 0.69,
+    shoulder: [0.12, 0.565], elbow: [0.19, 0.475], tip: [0.265, 0.37], armR: 0.062, legR: 0.06, hairBackZ: -0.08, extraOut: 0.3 },
   zhan: { height: 1.2, bz: 0.0, hipX: 0.065, hipY: 0.43, kneeY: 0.22, waistY: 0.5, chestY: 0.6, neckY: 0.68, headY: 0.72,
     shoulder: [0.115, 0.625], elbow: [0.17, 0.52], tip: [0.265, 0.38], armR: 0.052, legR: 0.055, hairBackZ: null, extraOut: 0.12 },
 };
