@@ -523,8 +523,9 @@ const RIG = {
   // 小棠：Hunyuan3D-2.1 版（2026/11/9）。第一代 TRELLIS 版留在 chars/tang_trellis.glb，數字是 hipY 0.36、shoulder [0.12, 0.575]、tip [0.29, 0.39]
   tang: { height: 1.05, bz: -0.01, hipX: 0.078, hipY: 0.345, kneeY: 0.18, waistY: 0.44, chestY: 0.54, neckY: 0.63, headY: 0.69,
     shoulder: [0.12, 0.565], elbow: [0.19, 0.475], tip: [0.265, 0.37], armR: 0.062, legR: 0.06, hairBackZ: -0.08, extraOut: 0.3 },
-  zhan: { height: 1.2, bz: 0.0, hipX: 0.065, hipY: 0.43, kneeY: 0.22, waistY: 0.5, chestY: 0.6, neckY: 0.68, headY: 0.72,
-    shoulder: [0.115, 0.625], elbow: [0.17, 0.52], tip: [0.265, 0.38], armR: 0.052, legR: 0.055, hairBackZ: null, extraOut: 0.12 },
+  // 小湛：Hunyuan3D-2.1 版（2026/11/10）。第一代 TRELLIS 版留在 chars/zhan_trellis.glb，數字是 hipY 0.43、shoulder [0.115, 0.625]、tip [0.265, 0.38]
+  zhan: { height: 1.2, bz: 0.0, hipX: 0.068, hipY: 0.42, kneeY: 0.21, waistY: 0.49, chestY: 0.58, neckY: 0.665, headY: 0.69,
+    shoulder: [0.115, 0.605], elbow: [0.175, 0.515], tip: [0.25, 0.375], armR: 0.05, legR: 0.055, hairBackZ: null, extraOut: 0.12 },
 };
 const BONES = ['hips', 'spine', 'chest', 'neck', 'head', 'uaL', 'laL', 'uaR', 'laR', 'ulL', 'llL', 'ulR', 'llR'];
 function b64buf(b64) { const bin = atob(b64), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i); return buf.buffer; }
@@ -1039,7 +1040,7 @@ function targetPose(c, time) {
   if (c.act === 'pair' && settled(c) && settled(c.partner) && c.partner.act === 'pair') {
     const z = c.key === 'zhan', k = c.pairKind;
     if (k === 'hug') {
-      if (z) { p.armLx = p.armRx = -1.25; p.armLz = -0.55; p.armRz = 0.55; p.elbowL = p.elbowR = 0.7; p.headX = 0.32; p.headZ = 0.1; }
+      if (z) { p.armLx = p.armRx = -1.15; p.armLz = -0.7; p.armRz = 0.7; p.elbowL = p.elbowR = 1.0; p.headX = 0.35; p.headZ = 0.1; }
       else { p.armLx = p.armRx = -1.35; p.armLz = -0.6; p.armRz = 0.6; p.elbowL = p.elbowR = 0.5; p.headX = -0.15; p.headZ = 0.2; p.bodyRx = 0.06; }
     } else if (k === 'pat') {
       if (z) { p.armRx = -2.35; p.armRz = 0.3 + Math.sin(time * 6) * 0.07; p.elbowR = 0.55; p.headX = 0.35; }
@@ -1269,7 +1270,7 @@ function updateBubbles() {
 
 // ---------- 兩個人的互動：抱抱、摸頭、牽手、親親 ----------
 const PAIR = {
-  hug: { d: 0.3, z: '湛湛把小棠整個人抱進懷裡', t: '小棠把臉埋在湛湛胸口', both: '兩個人抱在一起', t2: '小棠在湛湛懷裡蹭了蹭', bubZ: '過來。', bubT: '湛湛～' },
+  hug: { d: 0.22, z: '湛湛把小棠整個人抱進懷裡', t: '小棠把臉埋在湛湛胸口', both: '兩個人抱在一起', t2: '小棠在湛湛懷裡蹭了蹭', bubZ: '過來。', bubT: '湛湛～' },
   pat: { d: 0.44, z: '湛湛揉了揉小棠的頭', t: '小棠乖乖讓湛湛摸頭', both: '湛湛摸摸小棠的頭', t2: '小棠被摸到瞇起眼睛', bubZ: '乖。', bubT: '嘿嘿' },
   hold: { d: 0.56, side: true, z: '湛湛牽起小棠的手', t: '小棠把手塞進湛湛手心', both: '兩個人牽著手站在一起', t2: '小棠晃了晃牽著的手', bubZ: '手給我。', bubT: '牽好喔' },
   kiss: { d: 0.28, z: '湛湛低頭靠近小棠', t: '小棠踮起腳', both: '湛湛低頭親了小棠一下', t2: '小棠的臉紅到耳朵', bubZ: '……', bubT: '♡' },
