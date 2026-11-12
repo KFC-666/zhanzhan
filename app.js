@@ -1,6 +1,6 @@
 
-const VERSION = '0.12.2';
-import { createRoom } from './room.js?v=0.12.2';
+const VERSION = '0.12.3';
+import { createRoom } from './room.js?v=0.12.3';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -9,8 +9,8 @@ const PET_IMG = {
   apron: ['normal'],
   suit: ['normal'],
 };
-const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.12.2`;
-const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.12.2" alt="">`;
+const petSrc = (outfit, face) => `pet/${outfit}-${PET_IMG[outfit]?.includes(face) ? face : 'normal'}.webp?v=0.12.3`;
+const headImg = (face = 'normal') => `<img class="head-img" src="pet/${face === 'happy' ? 'head-happy' : 'head'}.webp?v=0.12.3" alt="">`;
 const bodyImg = (face = 'normal', outfit = 'shirt') => `<img class="body-img" src="${petSrc(outfit, face)}" alt="小湛">`;
 
 // ================= 小工具 =================
@@ -1124,7 +1124,7 @@ async function papi(method, path, { body, headers = {} } = {}) {
   }
   return res;
 }
-const IMG_RE = /^photos\/.+\.(png|jpe?g|webp)$/i;
+const IMG_RE = /^photos\/.+\.(png|jpe?g|webp|gif)$/i;
 function photoTime(p) {
   const m = p.path.match(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
   return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : '';
@@ -1159,7 +1159,7 @@ async function photoURL(item) {
   try { cache = await caches.open('zh-photos'); const hit = await cache.match(key); if (hit) blob = await hit.blob(); } catch { /* 不支援快取 */ }
   if (!blob) {
     const res = await papi('GET', `git/blobs/${item.sha}`, { headers: { Accept: 'application/vnd.github.raw' } });
-    const type = /\.png$/i.test(item.path) ? 'image/png' : /\.webp$/i.test(item.path) ? 'image/webp' : 'image/jpeg';
+    const type = /\.png$/i.test(item.path) ? 'image/png' : /\.webp$/i.test(item.path) ? 'image/webp' : /\.gif$/i.test(item.path) ? 'image/gif' : 'image/jpeg';
     blob = new Blob([await res.arrayBuffer()], { type });
     try { await cache?.put(key, new Response(blob)); } catch { /* 空間不夠就算了 */ }
   }
