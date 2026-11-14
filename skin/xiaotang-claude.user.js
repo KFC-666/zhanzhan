@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十二套顏色、粉圓字體、七種底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.7.0
+// @version      0.8.0
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -85,7 +85,7 @@
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } };
   const save = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* 存不了就算了 */ } };
   // bg：pattern＝兔兔底紋、image＝背景圖；img：哪一張；veil：霧面濃淡
-  const state = Object.assign({ theme: 'rose', font: 'huninn', bg: 'pattern', img: 'sakura', veil: 'mid', pat: 'bunny' }, load());
+  const state = Object.assign({ theme: 'rose', font: 'huninn', bg: 'pattern', img: 'sakura', veil: 'mid', pat: 'bunny', fx: 'mix', think: 'bunny' }, load());
   if (!THEMES.some(t => t[0] === state.theme)) state.theme = 'rose';
 
   const html = document.documentElement;
@@ -826,6 +826,132 @@ html:not([data-xt-bg="image"]) #xt-skin-panel .xt-pat-only { display: block; }
   }
 
   // ---------------------------------------------------------------
+  // 小動畫：送出訊息時飄出小愛心／星星／小花／蝴蝶；湛湛回覆時兔兔在輸入框上面跳
+  // 只用 Web Animations，動畫跑完就把元素拿掉；系統要求減少動態時全部不跑
+  // ---------------------------------------------------------------
+  const FX_SHAPES = {
+    heart: c => `<svg viewBox="-12 -11 24 22"><path fill="${c}" d="M0 -4c-3-5-11-3-10 3 1 4 10 9 10 9s9-5 10-9c1-6-7-8-10-3z"/></svg>`,
+    star: c => `<svg viewBox="-12 -12 24 24"><path fill="${c}" d="M0 -11L3.2 -3.6 11 -3.4 4.9 1.6 7 9.3 0 5 -7 9.3 -4.9 1.6 -11 -3.4 -3.2 -3.6z"/></svg>`,
+    flower: c => `<svg viewBox="-12 -12 24 24"><g fill="${c}"><circle cx="0" cy="-6" r="5"/><circle cx="5.7" cy="-1.9" r="5"/><circle cx="3.5" cy="4.9" r="5"/><circle cx="-3.5" cy="4.9" r="5"/><circle cx="-5.7" cy="-1.9" r="5"/></g><circle r="3.2" fill="#fff6c8"/></svg>`,
+    butterfly: c => `<svg viewBox="-12 -12 24 24"><g class="xt-wing" fill="${c}"><path d="M-1 -1C-6 -11-12 -8-10 -2-9 2-4 2-1 1z"/><path d="M-1 1C-6 2-9 8-5 9-2 9-1 5-1 2z"/></g><g class="xt-wing r" fill="${c}"><path d="M1 -1C6 -11 12 -8 10 -2 9 2 4 2 1 1z"/><path d="M1 1C6 2 9 8 5 9 2 9 1 5 1 2z"/></g><rect x="-0.9" y="-5" width="1.8" height="13" rx="0.9" fill="${c}" opacity=".85"/></svg>`,
+  };
+  const FX_KINDS = Object.keys(FX_SHAPES);
+  const reduceMQ = matchMedia('(prefers-reduced-motion: reduce)');
+  const fxColors = () => {
+    const c = themeColors();
+    const t = THEMES.find(x => x[0] === state.theme) || THEMES[0];
+    return [c.h, t[3], c.b, c.h];
+  };
+
+  let lastBurst = 0;
+  function burst() {
+    if (state.fx === 'off' || reduceMQ.matches) return;
+    const now = Date.now();
+    if (now - lastBurst < 800) return;   // 按鍵和畫面變化可能同時觸發，只飄一次
+    lastBurst = now;
+    const box = composerBox();
+    const r = box ? box.getBoundingClientRect() : { left: innerWidth / 2 - 100, width: 200, top: innerHeight - 120 };
+    const colors = fxColors();
+    const count = innerWidth < 600 ? 7 : 10;
+    for (let i = 0; i < count; i++) {
+      const kind = state.fx === 'mix' || !FX_SHAPES[state.fx] ? FX_KINDS[i % FX_KINDS.length] : state.fx;
+      const el = document.createElement('div');
+      el.className = 'xt-fx' + (kind === 'butterfly' ? ' fly' : '');
+      el.innerHTML = FX_SHAPES[kind](colors[i % colors.length]);
+      const size = 14 + Math.random() * 12;
+      const x0 = r.left + r.width * (0.55 + (Math.random() - 0.5) * 0.5);
+      el.style.cssText = `left:${x0}px;top:${r.top + 6}px;width:${size}px;height:${size}px`;
+      document.body.appendChild(el);
+      const dx = (Math.random() - 0.5) * 160;
+      const dy = -(110 + Math.random() * 130);
+      const spin = kind === 'butterfly' ? (Math.random() - 0.5) * 30 : (Math.random() - 0.5) * 120;
+      const anim = el.animate([
+        { transform: 'translate(-50%, 0) scale(.4) rotate(0deg)', opacity: 0 },
+        { transform: `translate(calc(-50% + ${dx * 0.35}px), ${dy * 0.3}px) scale(1) rotate(${spin * 0.3}deg)`, opacity: 1, offset: 0.2 },
+        { transform: `translate(calc(-50% + ${dx}px), ${dy}px) scale(.9) rotate(${spin}deg)`, opacity: 0 },
+      ], { duration: 1300 + Math.random() * 700, delay: i * 45, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' });
+      anim.onfinish = () => el.remove();
+      setTimeout(() => el.remove(), 3500);
+    }
+  }
+
+  // 什麼時候算「送出」：在輸入框按 Enter（不含 Shift、選字中）、按傳送鍵，或畫面上多了一則自己的訊息
+  const composerText = () => {
+    const c = document.querySelector('[data-cds="ChatComposer"]');
+    if (!c) return '';
+    const ed = c.querySelector('[contenteditable="true"], textarea');
+    return ed ? (ed.value !== undefined && ed.tagName === 'TEXTAREA' ? ed.value : ed.textContent) || '' : '';
+  };
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+    if (!e.target.closest || !e.target.closest('[data-cds="ChatComposer"]')) return;
+    if (composerText().trim()) burst();
+  }, true);
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-cds="ChatComposer"] button');
+    if (!b) return;
+    const label = (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '');
+    if (/send|傳送|送出|发送|發送/i.test(label) && composerText().trim()) burst();
+  }, true);
+  let msgCount = -1, msgPath = location.pathname;
+  function watchMessages() {
+    const n = document.querySelectorAll('[data-cds="UserMessage"]').length;
+    if (location.pathname !== msgPath) { msgPath = location.pathname; msgCount = -1; }
+    if (msgCount >= 0 && n === msgCount + 1) burst();
+    msgCount = n;
+  }
+
+  // 思考中的兔兔：輸入框出現「停止」鍵＝湛湛正在回覆
+  const BUNNY = `<svg viewBox="0 0 40 34"><ellipse class="xt-shadow" cx="20" cy="32" rx="10" ry="1.8"/><g class="xt-bun"><ellipse cx="14.5" cy="6" rx="2.6" ry="7" transform="rotate(-10 14.5 6)"/><ellipse cx="20.5" cy="5.5" rx="2.6" ry="7" transform="rotate(8 20.5 5.5)"/><ellipse cx="22" cy="23" rx="11" ry="8"/><circle cx="16.5" cy="15.5" r="6.5"/><circle cx="33" cy="22" r="2.6"/><circle class="xt-eye" cx="14.6" cy="14.6" r="1.1"/><ellipse class="xt-cheek" cx="13" cy="17.6" rx="1.6" ry="1"/></g></svg>`;
+  let bunnyEl = null;
+  const isReplying = () => {
+    const c = document.querySelector('[data-cds="ChatComposer"]');
+    if (!c) return false;
+    for (const b of c.querySelectorAll('button')) {
+      const label = (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '');
+      if (/stop|停止/i.test(label)) return true;
+    }
+    return false;
+  };
+  function watchThinking() {
+    const show = state.think !== 'off' && isReplying();
+    if (!show) { if (bunnyEl) { bunnyEl.remove(); bunnyEl = null; } return; }
+    const box = composerBox();
+    if (!box) return;
+    if (!bunnyEl) {
+      bunnyEl = document.createElement('div');
+      bunnyEl.id = 'xt-think';
+      bunnyEl.setAttribute('aria-hidden', 'true');
+      bunnyEl.innerHTML = BUNNY;
+      document.body.appendChild(bunnyEl);
+    }
+    const r = box.getBoundingClientRect();
+    bunnyEl.style.left = `${r.left + 18}px`;
+    bunnyEl.style.top = `${r.top - 37}px`;
+    const c = themeColors();
+    bunnyEl.style.setProperty('--xt-bun-line', c.b);
+    bunnyEl.style.setProperty('--xt-bun-cheek', c.h);
+  }
+  setInterval(() => { if (!document.hidden && document.body) { watchMessages(); watchThinking(); } }, 500);
+
+  addStyle(`
+.xt-fx { position: fixed; z-index: 2147483000; pointer-events: none; will-change: transform, opacity; }
+.xt-fx svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.xt-fx.fly .xt-wing { transform-origin: 0 0; animation: xt-flap .22s ease-in-out infinite alternate; }
+.xt-fx.fly .xt-wing.r { animation-delay: .11s; }
+@keyframes xt-flap { to { transform: scaleX(.35); } }
+#xt-think { position: fixed; z-index: 2147482000; width: 42px; height: 36px; pointer-events: none; }
+#xt-think svg { width: 100%; height: 100%; display: block; overflow: visible; }
+#xt-think .xt-bun { fill: #fffdfd; stroke: var(--xt-bun-line, #b9aeb3); stroke-width: 1.3; animation: xt-hop .9s cubic-bezier(.3,0,.4,1) infinite; transform-origin: 20px 31px; }
+#xt-think .xt-eye { fill: #4a3a40; stroke: none; }
+#xt-think .xt-cheek { fill: var(--xt-bun-cheek, #e8a0b4); stroke: none; opacity: .7; }
+#xt-think .xt-shadow { fill: #000; opacity: .12; animation: xt-hop-shadow .9s cubic-bezier(.3,0,.4,1) infinite; transform-origin: 20px 32px; }
+@keyframes xt-hop { 0%, 100% { transform: translateY(0) scale(1.06, .94); } 15% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-9px) scale(.97, 1.04); } 85% { transform: translateY(0) scale(1, 1); } }
+@keyframes xt-hop-shadow { 0%, 100% { transform: scale(1); opacity: .14; } 50% { transform: scale(.6); opacity: .06; } }
+@media (prefers-reduced-motion: reduce) { #xt-think .xt-bun, #xt-think .xt-shadow { animation: none; } }
+`, 'xiaotang-fx');
+
+  // ---------------------------------------------------------------
   // 切換按鈕（全部用 createElement 組，Chrome 的 Tampermonkey 也不會被擋）
   // ---------------------------------------------------------------
   function h(tag, props, kids) {
@@ -889,6 +1015,20 @@ html:not([data-xt-bg="image"]) #xt-skin-panel .xt-pat-only { display: block; }
         ]),
       ]),
       noteEl,
+      h('div', { class: 'xt-title', text: '送出時的小動畫' }),
+      h('div', { class: 'xt-row' }, [
+        h('button', { 'data-fx': 'mix', text: '綜合' }),
+        h('button', { 'data-fx': 'heart', text: '愛心' }),
+        h('button', { 'data-fx': 'star', text: '星星' }),
+        h('button', { 'data-fx': 'flower', text: '小花' }),
+        h('button', { 'data-fx': 'butterfly', text: '蝴蝶' }),
+        h('button', { 'data-fx': 'off', text: '關' }),
+      ]),
+      h('div', { class: 'xt-title', text: '湛湛回覆時' }),
+      h('div', { class: 'xt-row two' }, [
+        h('button', { 'data-think': 'bunny', text: '兔兔跳' }),
+        h('button', { 'data-think': 'off', text: '關' }),
+      ]),
       h('div', { class: 'xt-title', text: '字體' }),
       h('div', { class: 'xt-row two' }, [
         h('button', { 'data-font': 'huninn', text: '粉圓' }),
@@ -906,6 +1046,8 @@ html:not([data-xt-bg="image"]) #xt-skin-panel .xt-pat-only { display: block; }
       press('data-veil', state.veil);
       press('data-font', state.font);
       press('data-pat', state.pat);
+      press('data-fx', state.fx);
+      press('data-think', state.think);
       refreshPatThumbs();
       themeName.textContent = (THEMES.find(t => t[0] === state.theme) || THEMES[0])[1];
       const photo = readPhoto();
@@ -929,6 +1071,8 @@ html:not([data-xt-bg="image"]) #xt-skin-panel .xt-pat-only { display: block; }
       if (d.theme) state.theme = d.theme;
       if (d.pat) { state.pat = d.pat; state.bg = 'pattern'; bgChanged = true; }
       if (d.font) state.font = d.font;
+      if (d.fx) { state.fx = d.fx; save(state); refreshUI(); if (d.fx !== 'off') { lastBurst = 0; burst(); } return; }
+      if (d.think) state.think = d.think;
       if (d.veil) state.veil = d.veil;
       if (d.bg) { state.bg = d.bg; bgChanged = true; }
       if (d.img) {
