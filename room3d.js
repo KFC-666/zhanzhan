@@ -646,7 +646,7 @@ const RIGGED_BONES = { hips: 'hips', spine: 'spine', chest: 'chest', neck: 'neck
   uaL: 'upper_arm.L', laL: 'forearm.L', uaR: 'upper_arm.R', laR: 'forearm.R',
   ulL: 'thigh.L', llL: 'shin.L', ulR: 'thigh.R', llR: 'shin.R' };
 const _pm = new THREE.Vector3(), _pe = new THREE.Vector3(), _pw = new THREE.Vector3(), HAND_TIP = 0.2;
-let SIT_LIFT = 0.03, SIT_FWD = 0.08;  // 2026/11/15 在沙發上試過：抬 0.03、往前 0.08 最自然
+let SIT_LIFT = 0.03, SIT_FWD = 0.08, SOFA_GAP = 0.5;  // 2026/11/15 在沙發上試過：抬 0.03、往前 0.08 最自然；兩個人都在沙發上時隔 0.5（肩膀靠在一起）
 function useRigged(c, root, skin, R) {
   const box = new THREE.Box3().setFromObject(root), h = box.max.y - box.min.y;
   root.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
@@ -1154,6 +1154,13 @@ function updateChar(c, dt, time) {
       c.actT += dt;
       if (c.actT > c.actDur) chooseNext(c);
     }
+  }
+  // 兩個人都坐好在沙發上：往中間挪，肩膀靠在一起（兩個位子本來隔 0.9，小棠 11/15 說坐得太開）
+  if (settled(c) && c.spot?.id?.startsWith('sofa')) {
+    const pt = c.partner, both = !pt.out && settled(pt) && pt.spot?.id?.startsWith('sofa') && pt.spot.id !== c.spot.id;
+    const gap = c.useModel && pt.useModel ? SOFA_GAP : 0.62;
+    const tx = both ? sofa.x + (c.spot.id === 'sofaL' ? -gap / 2 : gap / 2) : c.spot.pos[0];
+    r.position.x = lerp(r.position.x, tx, Math.min(1, dt * 1.5));
   }
   r.rotation.y = c.ry;
 
