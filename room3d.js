@@ -645,6 +645,7 @@ function buildModel(c, b64) {
 const RIGGED_BONES = { hips: 'hips', spine: 'spine', chest: 'chest', neck: 'neck', head: 'head',
   uaL: 'upper_arm.L', laL: 'forearm.L', uaR: 'upper_arm.R', laR: 'forearm.R',
   ulL: 'thigh.L', llL: 'shin.L', ulR: 'thigh.R', llR: 'shin.R' };
+const _pm = new THREE.Vector3(), _pe = new THREE.Vector3(), _pw = new THREE.Vector3(), HAND_TIP = 0.2;
 let SIT_LIFT = 0.03, SIT_FWD = 0.08;  // 2026/11/15 在沙發上試過：抬 0.03、往前 0.08 最自然
 function useRigged(c, root, skin, R) {
   const box = new THREE.Box3().setFromObject(root), h = box.max.y - box.min.y;
@@ -667,6 +668,7 @@ function useRigged(c, root, skin, R) {
   c.body.add(wrap);
   wrap.traverse(o => { o.userData.chRoot = c.root; });
   c.model = { wrap, mesh: skin, B, R, apply, headObj: byName.head, hipH: R.hipY * R.height, kneeH: R.kneeY * R.height,
+    hands: { L: byName.handL, R: byName.handR, eL: byName.forearmL, eR: byName.forearmR },
     a0: Math.atan2(R.tip[0] - R.shoulder[0], R.shoulder[1] - R.tip[1]), rigged: true,
     sitLift: SIT_LIFT * R.height };  // Blender 的權重讓屁股和大腿跟著大腿骨轉，坐下會陷進坐墊，要抬高一點
   return c.model;
@@ -1161,7 +1163,9 @@ function updateChar(c, dt, time) {
   for (const key of POSE_KEYS) c.pose[key] = lerp(c.pose[key] ?? 0, tp[key], k);
   const P = c.pose, J = c.parts;
   if (c.useModel) {
-    const B = c.model.B, a0 = c.model.a0, ex = c.model.R.extraOut;
+    const B = c.model.B, a0 = c.model.a0;
+    // 舊骨架怕手臂插進身體，把手往外撐（extraOut）；Blender 骨架拿手機、書的時候不用撐，兩隻手才合得起來
+    const hd = (ACTS[c.key][c.act] || {}).hand, ex = c.model.rigged && !c.queue.length && (hd === 'phone' || hd === 'book') ? 0 : c.model.R.extraOut;
     B.ulL.rotation.x = P.legL; B.ulR.rotation.x = P.legR;
     B.llL.rotation.x = P.kneeL; B.llR.rotation.x = P.kneeR;
     B.uaL.rotation.set(P.armLx, 0, P.armLz + ex - a0);
@@ -1194,6 +1198,20 @@ function updateChar(c, dt, time) {
   const atSpot = !c.queue.length;
   c.props.phone.visible = atSpot && act.hand === 'phone';
   c.props.book.visible = atSpot && act.hand === 'book';
+  // 3D 模型：手機和書放在兩隻手掌中間，跟著手走（以前是固定在身體前面，會浮在半空中）
+  const held = c.props.phone.visible ? c.props.phone : c.props.book.visible ? c.props.book : null;
+  if (held && c.useModel && c.model.hands) {
+    const H = c.model.hands;
+    c.root.updateMatrixWorld(true);
+    _pm.set(0, 0, 0);
+    for (const sd of ['L', 'R']) {
+      H['e' + sd].getWorldPosition(_pe); H[sd].getWorldPosition(_pw);
+      _pm.add(_pw).addScaledVector(_pw.sub(_pe), HAND_TIP);   // 手腕再往前一點＝手掌
+    }
+    c.body.worldToLocal(_pm.multiplyScalar(0.5));
+    held.position.lerp(_pm, held.userData.placed ? Math.min(1, dt * 12) : 1); held.userData.placed = true;
+  }
+  for (const pr of [c.props.phone, c.props.book]) if (!pr.visible) pr.userData.placed = false;
   c.zzz.visible = sleeping;
   if (sleeping) {
     const hp = headPos(c, _hp);

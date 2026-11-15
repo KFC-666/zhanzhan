@@ -1,5 +1,5 @@
 
-const VERSION = '0.12.5';
+const VERSION = '0.12.6';
 import { createRoom } from './room.js?v=0.12.3';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
