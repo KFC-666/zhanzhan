@@ -486,6 +486,9 @@ const zhan = makeChibi({ name: '湛湛', R: 0.3, legLen: 0.33, torsoH: 0.31, tor
 const tang = makeChibi({ name: '小棠', R: 0.29, legLen: 0.25, torsoH: 0.27, torsoW: 0.3, skin: 0xfbe3d6,
   top: 0xf7ecdd, sleeve: 0xf7ecdd, leg: 0xfbe3d6, sock: 0xffffff, skirt: 0xf3bcc7, shoe: 0xf3b4bf, iris: 0x7c7c88, hair: hairTang });
 
+// 3D 模型還在下載時先不要露出程式畫的小人，等模型好了才出現（下載失敗才用小人）
+zhan.body.visible = tang.body.visible = false;
+
 // ---------- 兔兔 ----------
 function makeBunny(name, airplane) {
   const g = new THREE.Group();
@@ -642,6 +645,7 @@ function buildModel(c, b64) {
 const RIGGED_BONES = { hips: 'hips', spine: 'spine', chest: 'chest', neck: 'neck', head: 'head',
   uaL: 'upper_arm.L', laL: 'forearm.L', uaR: 'upper_arm.R', laR: 'forearm.R',
   ulL: 'thigh.L', llL: 'shin.L', ulR: 'thigh.R', llR: 'shin.R' };
+let SIT_LIFT = 0.03, SIT_FWD = 0.08;  // 2026/11/15 在沙發上試過：抬 0.03、往前 0.08 最自然
 function useRigged(c, root, skin, R) {
   const box = new THREE.Box3().setFromObject(root), h = box.max.y - box.min.y;
   root.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
@@ -663,7 +667,8 @@ function useRigged(c, root, skin, R) {
   c.body.add(wrap);
   wrap.traverse(o => { o.userData.chRoot = c.root; });
   c.model = { wrap, mesh: skin, B, R, apply, headObj: byName.head, hipH: R.hipY * R.height, kneeH: R.kneeY * R.height,
-    a0: Math.atan2(R.tip[0] - R.shoulder[0], R.shoulder[1] - R.tip[1]), rigged: true };
+    a0: Math.atan2(R.tip[0] - R.shoulder[0], R.shoulder[1] - R.tip[1]), rigged: true,
+    sitLift: SIT_LIFT * R.height };  // Blender 的權重讓屁股和大腿跟著大腿骨轉，坐下會陷進坐墊，要抬高一點
   return c.model;
 }
 let charMode = 'model';
@@ -776,7 +781,7 @@ function randomFloor(win) {
   return { id: 'floor', pos, rot: Math.random() * 6.28, pose: 'stand', via: [], name: '房間' };
 }
 function rootY(c, spot) {
-  if (spot.pose === 'sit') return spot.seat - c.legLen + 0.02;
+  if (spot.pose === 'sit') return spot.seat - c.legLen + 0.02 + (c.useModel ? c.model.sitLift || 0 : 0);
   if (spot.pose === 'lie') return bed.top + (c.useModel ? 0.19 : 0.2);
   if (spot.pose === 'kneel') return c.useModel ? 0.03 - c.model.kneeH : 0.1 - c.legLen;
   return 0;
@@ -846,7 +851,9 @@ function goTo(c, actKey, forcedSpot, customSpot) {
     }
     spot.via.forEach((v, i) => q.push(walk(v[0], v[1], { via: i })));
     if (isSettle(spot)) {
-      q.push({ type: 'settle', kind: 'in', x: spot.pos[0], z: spot.pos[1], y: rootY(c, spot), ry: spot.rot, rx: spot.pose === 'lie' ? -Math.PI / 2 : 0, dur: spot.pose === 'lie' ? Math.max(0.9, Math.hypot(spot.pos[0] - spot.via[spot.via.length - 1][0], spot.pos[1] - spot.via[spot.via.length - 1][1]) / 1.1) : 0.6, hop: spot.pose === 'lie' });
+      // 3D 模型坐下時往前坐一點，不然膝蓋在坐墊前緣後面、小腿會插進沙發前板（小棠 11/15 發現）
+      const fw = spot.pose === 'sit' && c.useModel ? SIT_FWD * c.model.R.height : 0;
+      q.push({ type: 'settle', kind: 'in', x: spot.pos[0] + Math.sin(spot.rot) * fw, z: spot.pos[1] + Math.cos(spot.rot) * fw, y: rootY(c, spot), ry: spot.rot, rx: spot.pose === 'lie' ? -Math.PI / 2 : 0, dur: spot.pose === 'lie' ? Math.max(0.9, Math.hypot(spot.pos[0] - spot.via[spot.via.length - 1][0], spot.pos[1] - spot.via[spot.via.length - 1][1]) / 1.1) : 0.6, hop: spot.pose === 'lie' });
     } else {
       q.push(walk(spot.pos[0], spot.pos[1]));
     }
@@ -1610,6 +1617,7 @@ Promise.all(loadJobs.slice()).then(async () => {
   await Promise.all([ch.zhan ? buildModel(zhan, ch.zhan) : null, ch.tang ? buildModel(tang, ch.tang) : null]);
   if (!zhan.model || !tang.model) charMode = 'chibi';
   applyCharMode();
+  zhan.body.visible = tang.body.visible = true;
   hintEl.textContent = '拖曳轉視角・拖人去家具・點燈／窗簾／螢幕／兔兔';
   ready = true;
   if (workingNow()) { tang.out = true; tang.root.visible = false; tang.outText = '小棠去上班了，18:40 回來'; tang.act = 'out'; tang.spot = S.door; setLine(tang, tang.outText); }
