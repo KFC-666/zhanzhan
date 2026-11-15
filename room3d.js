@@ -517,7 +517,7 @@ const peng = makeBunny('澎澎', false);
 cheng.g.position.set(pen.x - 0.25, 0, pen.z); peng.g.position.set(pen.x + 0.2, 0, pen.z + 0.2);
 const bunnies = [cheng, peng];
 
-// ---------- 3D 模型人物（第一代 TRELLIS 轉的，我自己綁的簡單骨架） ----------
+// ---------- 3D 模型人物（Hunyuan3D 轉的；glb 有骨架就用 Blender 綁的，沒有就用下面自己算的簡單骨架） ----------
 // 位置是從模型量出來的：高度正規化成 1、腳底 0、左右前後置中
 const RIG = {
   // 小棠：Hunyuan3D-2.1 版（2026/11/9）。第一代 TRELLIS 版留在 chars/tang_trellis.glb，數字是 hipY 0.36、shoulder [0.12, 0.575]、tip [0.29, 0.39]
@@ -597,6 +597,8 @@ function buildModel(c, b64) {
   return new Promise((resolve) => {
     new GLTFLoader().parse(typeof b64 === 'string' ? b64buf(b64) : b64, '', (g) => {
       g.scene.updateMatrixWorld(true);
+      let skin = null; g.scene.traverse(m => { if (m.isSkinnedMesh && !skin) skin = m; });
+      if (skin) return resolve(useRigged(c, g.scene, skin, R));
       let src = null; g.scene.traverse(m => { if (m.isMesh && !src) src = m; });
       if (!src) return resolve(null);
       const geo = src.geometry.clone();
@@ -629,11 +631,40 @@ function buildModel(c, b64) {
       const wrap = new THREE.Group(); wrap.scale.setScalar(R.height); wrap.add(sm);
       c.body.add(wrap);
       wrap.traverse(o => { o.userData.chRoot = c.root; });
-      c.model = { wrap, mesh: sm, B, R, hipH: R.hipY * R.height, kneeH: R.kneeY * R.height,
+      c.model = { wrap, mesh: sm, B, R, headObj: B.head, hipH: R.hipY * R.height, kneeH: R.kneeY * R.height,
         a0: Math.atan2(R.tip[0] - R.shoulder[0], R.shoulder[1] - R.tip[1]) };
       resolve(c.model);
     }, () => resolve(null));
   });
+}
+// Blender 綁好骨架的版本（chars/*.glb 自帶骨架和權重，home/room3d/blender/rig.py，2026/11/15）。
+// 姿勢程式沿用舊的寫法：B 裡是不放進場景的替身，旋轉照舊用「模型座標軸」寫；每一格再換算到 Blender 骨頭自己的軸向。
+const RIGGED_BONES = { hips: 'hips', spine: 'spine', chest: 'chest', neck: 'neck', head: 'head',
+  uaL: 'upper_arm.L', laL: 'forearm.L', uaR: 'upper_arm.R', laR: 'forearm.R',
+  ulL: 'thigh.L', llL: 'shin.L', ulR: 'thigh.R', llR: 'shin.R' };
+function useRigged(c, root, skin, R) {
+  const box = new THREE.Box3().setFromObject(root), h = box.max.y - box.min.y;
+  root.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+  const byName = {}; for (const b of skin.skeleton.bones) byName[b.name.replace(/[.\s]/g, '')] = b;
+  const rootQ = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const B = {}, J = [];
+  for (const [k, n] of Object.entries(RIGGED_BONES)) {
+    const bone = byName[n.replace(/[.\s]/g, '')];
+    if (!bone) { console.warn('3D 小房間：骨架少了', n); return null; }
+    const wp = rootQ.clone().multiply(bone.parent.getWorldQuaternion(new THREE.Quaternion()));  // 爸爸骨頭在模型裡的朝向
+    B[k] = new THREE.Object3D();
+    J.push({ bone, proxy: B[k], q0: bone.quaternion.clone(), wp, wpi: wp.clone().invert() });
+  }
+  const _q = new THREE.Quaternion();
+  const apply = () => { for (const j of J) j.bone.quaternion.copy(j.wpi).multiply(_q.setFromEuler(j.proxy.rotation)).multiply(j.wp).multiply(j.q0); };
+  skin.material = new THREE.MeshLambertMaterial({ map: skin.material.map || null });
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+  const wrap = new THREE.Group(); wrap.scale.setScalar(R.height / h); wrap.add(root);
+  c.body.add(wrap);
+  wrap.traverse(o => { o.userData.chRoot = c.root; });
+  c.model = { wrap, mesh: skin, B, R, apply, headObj: byName.head, hipH: R.hipY * R.height, kneeH: R.kneeY * R.height,
+    a0: Math.atan2(R.tip[0] - R.shoulder[0], R.shoulder[1] - R.tip[1]), rigged: true };
+  return c.model;
 }
 let charMode = 'model';
 function applyCharMode() {
@@ -656,7 +687,7 @@ function applyCharMode() {
 function isShown(o) { for (let x = o; x; x = x.parent) if (!x.visible) return false; return true; }
 const _hp = new THREE.Vector3();
 function headPos(c, out = new THREE.Vector3()) {
-  if (c.useModel) { c.model.B.head.getWorldPosition(out); out.y += 0.3 * c.model.R.height; }
+  if (c.useModel) { c.model.headObj.getWorldPosition(out); out.y += 0.3 * c.model.R.height; }
   else { c.head.getWorldPosition(out); out.y += 0.3; }
   return out;
 }
@@ -1130,6 +1161,7 @@ function updateChar(c, dt, time) {
     B.uaR.rotation.set(P.armRx, 0, P.armRz - ex + a0);
     B.laL.rotation.x = -P.elbowL; B.laR.rotation.x = -P.elbowR;
     B.neck.rotation.set(P.headX, P.headY, P.headZ);
+    if (c.model.apply) c.model.apply();
   } else {
     J.legL.rotation.x = P.legL; J.legR.rotation.x = P.legR;
     J.armL.rotation.x = P.armLx; J.armL.rotation.z = P.armLz;
