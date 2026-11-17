@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十二套顏色、粉圓字體、七種底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.8.1
+// @version      0.8.2
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -308,7 +308,11 @@ html[data-xt-bg="image"] .dframe-sidebar, html[data-xt-bg="image"] .dframe-sideb
   --df-web-sidebar-bg: color-mix(in srgb, var(--xt-sidebar) 80%, transparent) !important;
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
-/* 手機上收起來的側邊欄（左上角那一小格）：不鋪霧面，讓背景圖透出來；展開時照常有霧面 */
+/* 手機上收起來的側邊欄（左上角那一小格）：不鋪霧面，讓背景圖透出來；展開時照常有霧面。
+   外框（aside）本身永遠不加模糊：模糊會讓裡面 position: fixed 的展開面板被關在 32×32 的框裡，一開一關一直閃 */
+html[data-xt-bg="image"] .dframe-sidebar.df-hub-rail {
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
 html[data-xt-bg="image"] [data-xt-rail-mini] {
   --df-web-sidebar-bg: transparent !important;
   background: transparent !important;
@@ -544,9 +548,7 @@ html:not([data-xt-bg="image"]) #xt-skin-panel .xt-pat-only { display: block; }
   const railRO = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
     for (const en of entries) {
       const mini = en.contentRect.width > 0 && en.contentRect.width < 64;
-      en.target.toggleAttribute('data-xt-rail-mini', mini);
-      const aside = en.target.closest('.dframe-sidebar');
-      if (aside) aside.toggleAttribute('data-xt-rail-mini', mini);
+      if (en.target.hasAttribute('data-xt-rail-mini') !== mini) en.target.toggleAttribute('data-xt-rail-mini', mini);
     }
   }) : null;
   const railSeen = new WeakSet();
