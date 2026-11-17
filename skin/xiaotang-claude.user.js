@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         小棠的 Claude 主題
 // @description  沈湛幫小棠做的 claude.ai 換膚：十二套顏色、粉圓字體、七種底紋或背景圖。Safari（Userscripts）和電腦 Chrome（Tampermonkey）共用。
-// @version      0.8.0
+// @version      0.8.1
 // @namespace    https://github.com/KFC-666/zhanzhan
 // @updateURL    https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
 // @downloadURL  https://raw.githubusercontent.com/KFC-666/zhanzhan/main/skin/xiaotang-claude.user.js
@@ -308,6 +308,12 @@ html[data-xt-bg="image"] .dframe-sidebar, html[data-xt-bg="image"] .dframe-sideb
   --df-web-sidebar-bg: color-mix(in srgb, var(--xt-sidebar) 80%, transparent) !important;
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
+/* 手機上收起來的側邊欄（左上角那一小格）：不鋪霧面，讓背景圖透出來；展開時照常有霧面 */
+html[data-xt-bg="image"] [data-xt-rail-mini] {
+  --df-web-sidebar-bg: transparent !important;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
 html[data-xt-bg="image"] [data-cds="UserMessage"] [class*="message-bubble-radius"] {
   background: var(--xt-bubble-glass) !important;
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
@@ -534,7 +540,25 @@ html:not([data-xt-bg="image"]) #xt-skin-panel .xt-pat-only { display: block; }
     if (parseFloat(cs.borderTopLeftRadius) >= 4) return false;   // 圓角的是框框本身（像輸入框），不是底
     return alphaOf(cs.backgroundColor) >= 0.5 || /gradient/.test(cs.backgroundImage);
   }
+  // 側邊欄縮成一小格（手機的 Claude Code）時做記號；用 ResizeObserver，展開的那一刻就拿掉記號，不會閃
+  const railRO = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
+    for (const en of entries) {
+      const mini = en.contentRect.width > 0 && en.contentRect.width < 64;
+      en.target.toggleAttribute('data-xt-rail-mini', mini);
+      const aside = en.target.closest('.dframe-sidebar');
+      if (aside) aside.toggleAttribute('data-xt-rail-mini', mini);
+    }
+  }) : null;
+  const railSeen = new WeakSet();
+  function watchRail() {
+    if (!railRO) return;
+    document.querySelectorAll('.dframe-sidebar-body').forEach(b => {
+      if (!railSeen.has(b)) { railSeen.add(b); railRO.observe(b); }
+    });
+  }
+
   function markGrounds() {
+    watchRail();
     const minW = innerWidth * 0.6;
     document.querySelectorAll('[role="feed"], [data-cds="ChatComposer"]').forEach(start => {
       const startW = start.getBoundingClientRect().width;
