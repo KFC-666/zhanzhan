@@ -1,5 +1,5 @@
 
-const VERSION = '0.12.7';
+const VERSION = '0.12.8';
 import { createRoom } from './room.js?v=0.12.3';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
@@ -763,11 +763,16 @@ function petOutfit(night, asleep) {
 }
 // ---- 小房間 ----
 let roomInst = null;
-// 小房間分 3D 和 2.5D（小湛已經拿掉，2026/11/8）
-let petSeg = LS.get('zh-petseg', '3d');
-if (petSeg !== 'room' && petSeg !== '3d') petSeg = '3d';
+// 小房間只留 2.5D（2026/11/18 小棠決定拿掉 3D）。
+// 3D 的程式（room3d.js）和模型（room3d/）都還留著，之後做小動畫、小遊戲可以用；
+// 要再打開 3D，把下面的 ROOM_3D 改成 true 就會恢復 3D／2.5D 切換。
+const ROOM_3D = false;
+let petSeg = ROOM_3D ? LS.get('zh-petseg', '3d') : 'room';
+if (petSeg !== 'room' && petSeg !== '3d') petSeg = 'room';
 function renderPetSeg() {
-  $('#pet-seg').innerHTML = `<div class="seg"><button data-pseg="3d" class="${petSeg === '3d' ? 'on' : ''}">3D</button><button data-pseg="room" class="${petSeg === 'room' ? 'on' : ''}">2.5D</button></div>`;
+  $('#pet-seg').innerHTML = ROOM_3D
+    ? `<div class="seg"><button data-pseg="3d" class="${petSeg === '3d' ? 'on' : ''}">3D</button><button data-pseg="room" class="${petSeg === 'room' ? 'on' : ''}">2.5D</button></div>`
+    : '';
 }
 let room3dInst = null, room3dLoading = false;
 function roomApi() {
