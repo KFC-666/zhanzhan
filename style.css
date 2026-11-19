@@ -451,6 +451,10 @@ body.kb .tabbar { display: none; }
 .live-think { font-size: 12.5px; color: var(--text-3); white-space: pre-wrap; max-height: 120px; overflow-y: auto; margin-top: 6px; line-height: 1.5; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 24px); mask-image: linear-gradient(to bottom, transparent, #000 24px); }
 .live .tr-tools { margin-top: 6px; font-size: 12px; }
 
+.room.px .room-bg, .px-ov, .pxs { image-rendering: crisp-edges; image-rendering: pixelated; }
+.px-ov { position: absolute; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.pxs { position: absolute; left: 0; top: 0; background-repeat: no-repeat; image-rendering: pixelated; cursor: pointer; filter: drop-shadow(0 1px 1px rgba(60, 30, 40, .22)); }
+.room.px-night .pxs { filter: brightness(.86) saturate(.92) drop-shadow(0 1px 1px rgba(0, 0, 0, .3)); }
 .room-pop { position: absolute; z-index: 5000; font-size: 16px; font-weight: 700; color: #e0708a; pointer-events: none; animation: roomPop 1.6s ease-out forwards; text-shadow: 0 1px 2px rgba(255,255,255,.8); }
 @keyframes roomPop { 0% { opacity: 0; transform: translate(-50%, 0) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -8px) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -46px) scale(1); } }
 

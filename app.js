@@ -1,6 +1,6 @@
 
-const VERSION = '0.12.8';
-import { createRoom } from './room.js?v=0.12.3';
+const VERSION = '0.13.0';
+import { createRoom } from './room.js?v=0.13.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -208,7 +208,7 @@ function renderTopbar() {
   }
 }
 function switchTab(tab) {
-  if (tab !== 'pet') { if (roomInst) roomInst.pause(); if (room3dInst) room3dInst.pause(); }
+  if (tab !== 'pet') { if (roomInst) roomInst.pause(); if (roomPxInst) roomPxInst.pause(); if (room3dInst) room3dInst.pause(); }
   currentTab = tab;
   LS.set('zh-tab', tab);
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${tab}`));
@@ -762,17 +762,17 @@ function petOutfit(night, asleep) {
   return PET_IMG[o] ? o : 'shirt';
 }
 // ---- 小房間 ----
-let roomInst = null;
+let roomInst = null, roomPxInst = null;
 // 小房間只留 2.5D（2026/11/18 小棠決定拿掉 3D）。
 // 3D 的程式（room3d.js）和模型（room3d/）都還留著，之後做小動畫、小遊戲可以用；
 // 要再打開 3D，把下面的 ROOM_3D 改成 true 就會恢復 3D／2.5D 切換。
 const ROOM_3D = false;
-let petSeg = ROOM_3D ? LS.get('zh-petseg', '3d') : 'room';
-if (petSeg !== 'room' && petSeg !== '3d') petSeg = 'room';
+// 2026/11/20 加了像素版小房間（room-px/），小棠要跟 2.5D 比較，用上面的切換鈕換
+let petSeg = LS.get('zh-petseg', 'room');
+if (!['room', 'px', ...(ROOM_3D ? ['3d'] : [])].includes(petSeg)) petSeg = 'room';
 function renderPetSeg() {
-  $('#pet-seg').innerHTML = ROOM_3D
-    ? `<div class="seg"><button data-pseg="3d" class="${petSeg === '3d' ? 'on' : ''}">3D</button><button data-pseg="room" class="${petSeg === 'room' ? 'on' : ''}">2.5D</button></div>`
-    : '';
+  const b = (k, l) => `<button data-pseg="${k}" class="${petSeg === k ? 'on' : ''}">${l}</button>`;
+  $('#pet-seg').innerHTML = `<div class="seg">${ROOM_3D ? b('3d', '3D') : ''}${b('room', '2.5D')}${b('px', '像素')}</div>`;
 }
 let room3dInst = null, room3dLoading = false;
 function roomApi() {
@@ -793,6 +793,8 @@ function roomApi() {
 async function show3D() {
   $('#pet-root').style.display = 'none';
   $('#room-root').style.display = 'none';
+  $('#roompx-root').style.display = 'none';
+  if (roomPxInst) roomPxInst.pause();
   $('#room3d-root').style.display = '';
   if (roomInst) roomInst.pause();
   if (room3dInst) { room3dInst.resume(); return; }
@@ -813,21 +815,31 @@ $('#pet-seg').addEventListener('click', (e) => {
   petSeg = b.dataset.pseg; LS.set('zh-petseg', petSeg);
   renderPet(true);
 });
-function showRoom() {
+function showRoom(px) {
   $('#pet-root').style.display = 'none';
   $('#room3d-root').style.display = 'none';
   if (room3dInst) room3dInst.pause();
-  $('#room-root').style.display = '';
-  if (roomInst) { roomInst.resume(); return; }
-  roomInst = createRoom($('#room-root'), roomApi());
+  $('#room-root').style.display = px ? 'none' : '';
+  $('#roompx-root').style.display = px ? '' : 'none';
+  if (px) {
+    if (roomInst) roomInst.pause();
+    if (roomPxInst) { roomPxInst.resume(); return; }
+    roomPxInst = createRoom($('#roompx-root'), roomApi(), 'px');
+  } else {
+    if (roomPxInst) roomPxInst.pause();
+    if (roomInst) { roomInst.resume(); return; }
+    roomInst = createRoom($('#room-root'), roomApi());
+  }
 }
 function renderPet(first) {
   if (currentTab !== 'pet') return;
   renderPetSeg();
-  if (petSeg === 'room') { showRoom(); return; }
+  if (petSeg === 'room' || petSeg === 'px') { showRoom(petSeg === 'px'); return; }
   if (petSeg === '3d') { show3D(); return; }
   if (roomInst) roomInst.pause();
+  if (roomPxInst) roomPxInst.pause();
   $('#room-root').style.display = 'none';
+  $('#roompx-root').style.display = 'none';
   $('#pet-root').style.display = '';
   const root = $('#pet-root');
   const s = petNow();

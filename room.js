@@ -28,15 +28,41 @@ const FLOOR = [
 ];
 const PEN = [[150, 690], [260, 700], [330, 660], [200, 650], [300, 730], [120, 720]];
 
+// ---------- 像素版（room-px/）----------
+// 房間圖 384×256，一格＝原圖 4 單位；邏輯座標照舊用 1536×1024。
+const PXV = '1';
+const PXI = (n) => `room-px/${n}.png?v=${PXV}`;
+// 像素房間的家具位置跟原圖差一點，這些點另外對過
+const SPOTS_PX = {
+  bed: { x: 640, y: 392 }, bedSide: { x: 700, y: 384 }, desk: { x: 312, y: 462 }, sofa: { x: 740, y: 482 }, sofa2: { x: 962, y: 532 },
+  stove: { x: 900, y: 382 }, fridge: { x: 1062, y: 404 }, table1: { x: 1170, y: 470 }, table2: { x: 1290, y: 520 },
+  door: { x: 1392, y: 612 }, doorIn: { x: 1312, y: 652 }, tarot: { x: 880, y: 642 }, penIn: { x: 230, y: 690 }, penGate: { x: 482, y: 702 },
+};
+// 格子表：格子大小、每一列（腳底＝格子底邊中間）
+const SHEET = {
+  tang: { w: 64, h: 80, W: 512, H: 400, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4 },
+    poses: { 'tang-normal': 0, 'tang-happy': 1, 'tang-eat': 2, 'tang-phone': 3, 'tang-game': 4, 'tang-bunny': 5, 'tang-sleep': 6 } },
+  zhan: { w: 52, h: 80, W: 416, H: 400, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4 },
+    poses: { 'zhan-normal': 0, 'zhan-happy': 1, 'zhan-hungry': 2, 'zhan-home': 3, 'zhan-apron': 4, 'zhan-wolf': 5, 'zhan-wolfsleep': 6, 'zhan-welcome': 7 } },
+  pair: { w: 80, h: 80, W: 320, H: 80, poses: { hug: 0, pat: 1, poke: 2, tarot: 3 } },
+  bunny: { w: 40, h: 40, W: 200, H: 80, rows: { cheng: 0, peng: 1 } },
+};
+// 疊在房間上的圖：[x, y, 寬, 高]（384×256 的格子），z 用底邊換算成原圖 y
+const OV = {"bed-tang":[95,26,96,74],"bed-zhan":[95,26,99,74],"bed-both":[95,26,100,74],"bed-tangphone":[95,26,97,71],"bed-phoneboth":[95,26,97,74],"win-day":[63,26,33,44],"win-sunset":[63,26,33,44],"win-rainday":[63,26,33,44],"win-rainnight":[63,26,33,44],"sofa-movie":[149,78,89,68],"decor-anniv":[280,40,55,71],"decor-bday":[280,41,55,73],"table-coffee":[283,80,45,30],"table-tarot":[195,110,44,30],"screen-xp":[47,64,24,23],"sofa":[153,87,69,54],"fence":[2,149,110,55]};
+const OV_Z = { win: 1, 'screen-xp': 1, sofa: 560, fence: 812 };
+const HOP_Y = [0, 2, 5, 1];
+
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const chance = (p) => Math.random() < p;
 const clamp = (n, a = 0, b = 100) => Math.max(a, Math.min(b, n));
 
-export function createRoom(root, api) {
+export function createRoom(root, api, mode = '25d') {
+  const PX = mode === 'px';
+  const SP = PX ? { ...SPOTS, ...SPOTS_PX } : SPOTS;
   // api: { tw(), getCalendar(), getHealthDays(), getPeriodInfo(), getConfig(), loadStory(date), say(text) }
   root.innerHTML = `
-    <div class="room-wrap"><div class="room" id="room-stage">
-      <img class="room-bg" src="${IMG('room')}" alt="">
+    <div class="room-wrap"><div class="room ${PX ? 'px' : ''}" id="room-stage">
+      <img class="room-bg" src="${PX ? PXI('room') : IMG('room')}" alt="">
       <div class="room-night"></div>
     </div></div>
     <div class="room-status" id="room-status"></div>
@@ -54,9 +80,9 @@ export function createRoom(root, api) {
   const mk = (id, name, h) => {
     const el = document.createElement('div');
     el.className = 'ag';
-    el.innerHTML = `<div class="ag-bub"></div><img alt="${name}">`;
+    el.innerHTML = PX ? `<div class="ag-bub"></div><div class="pxs" role="img" aria-label="${name}"></div>` : `<div class="ag-bub"></div><img alt="${name}">`;
     stage.appendChild(el);
-    return { id, name, el, img: el.querySelector('img'), bub: el.querySelector('.ag-bub'), h, x: 0, y: 0, path: [], speed: 130,
+    return { id, name, el, img: el.querySelector('img'), spr: el.querySelector('.pxs'), bub: el.querySelector('.ag-bub'), h, x: 0, y: 0, path: [], speed: 130,
       act: null, until: 0, text: '', sprite: '', out: false, face: 1, needs: { hunger: 30, energy: 70, fun: 60, social: 60 }, walkT: 0 };
   };
   const zhan = mk('zhan', '湛湛', 285);
@@ -145,6 +171,8 @@ export function createRoom(root, api) {
       tidy: { spot: null, sec: [20, 40], sprite: 'zhan-normal', bub: '🧹', text: ['湛湛在整理房間', '湛湛把小棠亂丟的外套掛好', '湛湛擦了一下桌子'], fx: {} },
       eat: { spot: 'table2', sec: [30, 60], sprite: 'zhan-normal', bub: '🍚', text: ['湛湛坐下來吃飯', '湛湛吃得很安靜'], fx: { hunger: -50 } },
       wander: { spot: null, sec: [6, 14], sprite: null, bub: '', text: ['湛湛走到窗邊站了一會兒', '湛湛在房間裡走了一圈'], fx: {} },
+      wait: { spot: 'doorIn', sec: [600, 600], sprite: PX ? 'zhan-welcome' : 'zhan-happy', bub: '🚪', text: ['湛湛算好時間，站到門口等小棠下班', '湛湛看了一眼時鐘，走到門口等小棠回來'], fx: {} },
+      coffee: { spot: 'stove', sec: [40, 70], sprite: 'zhan-apron', bub: '☕', text: ['湛湛幫小棠沖了一杯偏酸的黑咖啡，放在餐桌上', '湛湛煎了蛋、烤了吐司，咖啡也倒好了'], fx: {} },
     },
   };
   // kind：hug／pat／poke 有兩人合照圖；fight、talk 用動畫
@@ -153,12 +181,15 @@ export function createRoom(root, api) {
     { kind: 'pat', text: ['湛湛摸了摸小棠的頭', '小棠湊過去討摸，湛湛笑著揉她的頭髮', '湛湛經過時順手摸了一下小棠的頭'], sprites: ['zhan-happy', 'tang-happy'], bub: '💗' },
     { kind: 'poke', text: ['小棠踮腳戳湛湛的臉，被他低頭看了一眼', '小棠趁湛湛不注意戳了他的臉頰', '小棠一直戳湛湛的臉，他面不改色讓她戳'], sprites: ['zhan-normal', 'tang-happy'], bub: '👉' },
     { kind: 'fight', text: ['小棠偷襲湛湛的腰，被他反手抓住手腕', '小棠想偷捏湛湛的臉，被他側身閃開'], sprites: ['zhan-normal', 'tang-happy'], bub: '😤' },
+    { kind: 'tarot', text: ['湛湛在茶几上鋪好桌布，幫小棠抽塔羅', '小棠拿出塔羅牌，要湛湛幫她抽今天的運勢', '兩個人坐在地毯上，一張一張翻牌'], sprites: ['zhan-normal', 'tang-happy'], bub: '🔮' },
     { kind: 'talk', text: ['兩個人靠在一起小聲聊天', '小棠跟湛湛抱怨今天的客人，湛湛安靜聽著', '湛湛低頭親了一下小棠的額頭'], sprites: ['zhan-happy', 'tang-happy'], bub: '💬' },
   ];
-  const kindOf = (t) => (/抱/.test(t) ? 'hug' : /摸.{0,4}頭|揉.{0,3}頭髮|討摸/.test(t) ? 'pat' : /戳/.test(t) ? 'poke' : /偷襲|閃開|抓住/.test(t) ? 'fight' : 'talk');
+  const kindOf = (t) => (PX && /塔羅/.test(t) ? 'tarot' : /抱/.test(t) ? 'hug' : /摸.{0,4}頭|揉.{0,3}頭髮|討摸/.test(t) ? 'pat' : /戳/.test(t) ? 'poke' : /偷襲|閃開|抓住/.test(t) ? 'fight' : 'talk');
   let pairKind = null;
   let lastHeart = 0;
 
+  const backMin = () => (shiftToday() === 'half' ? 13 * 60 + 10 : 18 * 60 + 40);
+  const tarotHour = () => { const m = minOfDay(); return PX && m >= 19 * 60 && m < 21 * 60; };
   // ---------- 決定下一件事 ----------
   let pairLock = 0;
   function sprite(a, base) {
@@ -175,13 +206,17 @@ export function createRoom(root, api) {
   function start(a, key, opts = {}) {
     const def = T[a.id][key];
     const sec = opts.sec || (def.sec[0] + Math.random() * (def.sec[1] - def.sec[0]));
-    a.act = { key, sprite: opts.sprite || def.sprite, bub: opts.bub ?? def.bub, fx: def.fx, spot: opts.spot || def.spot };
+    let spot = opts.spot || def.spot;
+    // 像素版：深夜小棠改躺在床上滑手機
+    // （湛湛在沙發看書時就留在沙發，兩個人一起窩著看電影）
+    if (PX && a === tang && key === 'phone' && !opts.spot && isNight() && !['read', 'watch'].includes(zhan.act?.key)) spot = 'bed';
+    a.act = { key, sprite: opts.sprite || def.sprite, bub: opts.bub ?? def.bub, fx: def.fx, spot, xp: key === 'game' && chance(0.4) };
     a.until = performance.now() / 1000 + sec;
     // 小棠不在家時，不要挑提到她的句子
     let pool = def.text;
     if (a === zhan && tang.out) pool = pool.filter((x) => !x.includes('小棠')).concat(pool.every((x) => x.includes('小棠')) ? ['湛湛一個人安靜地做自己的事'] : []);
     a.text = opts.text || pick(pool);
-    let target = a.act.spot ? { ...SPOTS[a.act.spot] } : { x: pick(FLOOR)[0], y: pick(FLOOR)[1] };
+    let target = a.act.spot ? { ...SP[a.act.spot] } : { x: pick(FLOOR)[0], y: pick(FLOOR)[1] };
     target = avoidOverlap(a, target);
     walkTo(a, target, !!opts.run);
     linkBunnies(a, a.text);
@@ -213,7 +248,7 @@ export function createRoom(root, api) {
     a.act = { key: 'out', sprite: null, bub: '', fx: {}, spot: 'door', leaving: true };
     a.until = performance.now() / 1000 + sec;
     a.text = text;
-    walkTo(a, SPOTS.door);
+    walkTo(a, SP.door);
     addLog(text, star);
   }
 
@@ -234,6 +269,10 @@ export function createRoom(root, api) {
         return;
       }
     }
+    // 小棠快下班：湛湛去門口等
+    if (a === zhan && tang.out && isWorkDay() && !zhan.out && m >= backMin() - 10 && m < backMin() + 30) return start(a, 'wait');
+    // 上班日早上：湛湛幫小棠準備咖啡
+    if (a === zhan && isWorkDay() && !tang.out && m >= 7 * 60 && m < 8 * 60 + 15 && chance(0.5)) return start(a, 'coffee');
     // 生理期
     if (isPeriod()) {
       if (a === tang && chance(0.45)) return start(a, 'rest');
@@ -259,13 +298,15 @@ export function createRoom(root, api) {
     return start(a, pick(opts));
   }
   function startPair(override, star = false) {
-    const p = override ? (PAIR.find((x) => x.kind === kindOf(override)) || PAIR[4]) : pick(PAIR);
+    const pool = PAIR.filter((x) => x.kind !== 'tarot' || tarotHour());
+    const p = override ? (PAIR.find((x) => x.kind === kindOf(override)) || PAIR.find((x) => x.kind === 'talk')) : pick(pool);
     const text = override || pick(p.text);
     pairKind = p.kind;
-    const spot = pick(FLOOR);
+    const spot = p.kind === 'tarot' ? [SP.tarot.x, SP.tarot.y] : pick(FLOOR);
     const now = performance.now() / 1000;
     pairLock = now + 120;
-    for (const [a, sp, dx] of [[zhan, p.sprites[0], -55], [tang, p.sprites[1], 55]]) {
+    const gap = p.kind === 'tarot' ? 20 : 55;
+    for (const [a, sp, dx] of [[zhan, p.sprites[0], -gap], [tang, p.sprites[1], gap]]) {
       a.act = { key: 'pair', sprite: sp, bub: p.bub, fx: { social: 40, fun: 10 } };
       a.until = now + 25 + Math.random() * 15;
       a.text = text;
@@ -317,10 +358,11 @@ export function createRoom(root, api) {
   function comeBack(a, text) {
     a.out = false;
     a.el.style.display = '';
-    place(a, SPOTS.door);
+    place(a, SP.door);
     a.act = null;
     a.until = 0;
     addLog(text || (a === tang ? pick(['小棠下班回家了，湛湛走過去接過她的包包', '小棠回來了，一進門就喊湛湛']) : '湛湛回來了，手上提著一袋東西'));
+    if (a === tang && zhan.act?.key === 'wait' && !zhan.out) startPair('小棠一進門就撲進湛湛懷裡，被他穩穩抱住', true);
   }
 
   // ---------- 初始位置 ----------
@@ -386,7 +428,7 @@ export function createRoom(root, api) {
           continue;
         }
         if (arrived(b) && chance(0.25)) {
-          const free = !tang.out || !zhan.out ? chance(0.25) : false;
+          const free = !tang.out || !zhan.out ? chance(PX && api.tw().wd === 0 ? 0.7 : 0.25) : false;
           walkTo(b, free ? pick(FLOOR) : pick(PEN));
           b.speed = 160;
         }
@@ -407,7 +449,8 @@ export function createRoom(root, api) {
     for (const a of all) step(a, dt);
     for (const a of all) draw(a, now);
     const mm = minOfDay();
-    stage.querySelector('.room-night').style.background = mm < 6 * 60 ? 'rgba(25, 20, 60, .28)' : mm >= 22 * 60 ? 'rgba(25, 20, 60, .12)' : 'transparent';
+    if (PX) pxScene(mm);
+    else stage.querySelector('.room-night').style.background = mm < 6 * 60 ? 'rgba(25, 20, 60, .28)' : mm >= 22 * 60 ? 'rgba(25, 20, 60, .12)' : 'transparent';
     const zt = zhan.out ? '出門中' : zhan.text || '…';
     const tt = tang.out ? (isWorkDay() ? '上班中' : '出門中') : tang.text || '…';
     statusEl.innerHTML = zt === tt && !zhan.out ? `<span>${escapeHTML(zt)}</span>` : `<span>湛湛｜${escapeHTML(zt)}</span><span>小棠｜${escapeHTML(tt)}</span>`;
@@ -427,7 +470,7 @@ export function createRoom(root, api) {
   }
   // 兩個人都到定點時，換成合照圖（白天才用，晚上穿睡衣就用動畫）
   function pairShowing() {
-    return pairKind && ['hug', 'pat', 'poke'].includes(pairKind) && !isNight() && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang) && !zhan.out && !tang.out;
+    return pairKind && (['hug', 'pat', 'poke'].includes(pairKind) || (PX && pairKind === 'tarot')) && !isNight() && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang) && !zhan.out && !tang.out;
   }
   function popFx(x, y, ch) {
     const el = document.createElement('div');
@@ -440,6 +483,7 @@ export function createRoom(root, api) {
   }
   function draw(a, now) {
     if (a.out && a.el.style.display === 'none') return;
+    if (PX) return drawPx(a, now);
     if (a === zhan || a === tang) {
       if (zhan.act?.key !== 'pair' || tang.act?.key !== 'pair') pairKind = pairKind && (zhan.act?.key === 'pair' || tang.act?.key === 'pair') ? pairKind : null;
       const both = pairKind && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang);
@@ -495,6 +539,140 @@ export function createRoom(root, api) {
     const bub = !walking && a.act?.bub ? a.act.bub : '';
     if (a.bub.textContent !== bub) a.bub.textContent = bub;
     a.bub.style.transform = `translate(-50%, ${-h - 18}px)`;
+  }
+
+  // ---------- 像素版：場景（底圖、疊圖）和人物 ----------
+  const ovEls = {};
+  let weather = { rain: false, at: 0 };
+  async function fetchWeather() {
+    weather.at = Date.now();
+    try {
+      const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=24.15&longitude=120.68&current=weather_code&timezone=Asia%2FTaipei');
+      const j = await r.json();
+      const c = Number(j?.current?.weather_code);
+      weather.rain = (c >= 51 && c <= 67) || (c >= 80 && c <= 99);
+    } catch { /* 抓不到就當晴天 */ }
+  }
+  const lightNight = (m) => m >= 18 * 60 + 30 || m < 6 * 60;
+  function setOv(name, on, night) {
+    let el = ovEls[name];
+    if (!on) { if (el && el.dataset.css !== 'off') { el.dataset.css = 'off'; el.style.display = 'none'; } return; }
+    if (!el) {
+      el = ovEls[name] = document.createElement('img');
+      el.className = 'px-ov'; el.alt = '';
+      stage.appendChild(el);
+    }
+    const src = PXI(night ? `${name}-n` : name);
+    if (el.dataset.src !== src) { el.dataset.src = src; el.src = src; }
+    const [x, y, w, h] = OV[name];
+    const u = 4 * scale;
+    const css = `display:block;left:${x * u}px;top:${y * u}px;width:${w * u}px;height:${h * u}px;z-index:${OV_Z[name] ?? (name.startsWith('win') ? 1 : (y + h) * 4)}`;
+    if (el.dataset.css !== css) { el.dataset.css = css; el.style.cssText = css; }
+  }
+  const pxHide = new Set();
+  function pxScene(m) {
+    const night = lightNight(m);
+    const bg = stage.querySelector('.room-bg');
+    const want = PXI(night ? 'room-night' : 'room');
+    if (bg.dataset.src !== want) { bg.dataset.src = want; bg.src = want; }
+    if (Date.now() - weather.at > 30 * 60 * 1000) fetchWeather();
+    // 窗外
+    const win = weather.rain ? (night ? 'win-rainnight' : 'win-rainday') : night ? null : m >= 16 * 60 + 30 ? 'win-sunset' : 'win-day';
+    for (const w of ['win-day', 'win-sunset', 'win-rainday', 'win-rainnight']) setOv(w, w === win, night);
+    // 床
+    pxHide.clear();
+    const here = (a) => !a.out && a.act && arrived(a);
+    const tSleep = here(tang) && tang.act.sprite === 'tang-sleep';
+    const tPhone = here(tang) && tang.act.key === 'phone' && tang.act.spot === 'bed';
+    const zSleep = here(zhan) && zhan.act.sprite === 'zhan-wolfsleep' && zhan.act.spot === 'bedSide';
+    const tIn = tSleep || tPhone;
+    const bed = tIn && zSleep ? (tPhone ? 'bed-phoneboth' : 'bed-both') : tIn ? (tPhone ? 'bed-tangphone' : 'bed-tang') : zSleep ? 'bed-zhan' : null;
+    for (const b of ['bed-tang', 'bed-zhan', 'bed-both', 'bed-tangphone', 'bed-phoneboth']) setOv(b, b === bed, night);
+    if (tIn) pxHide.add(tang);
+    if (zSleep) pxHide.add(zhan);
+    // 晚上一起窩沙發看電影
+    const movie = isNight() && here(tang) && here(zhan) && ['phone', 'rest'].includes(tang.act.key) && tang.act.spot === 'sofa' && ['watch', 'read'].includes(zhan.act.key);
+    setOv('sofa-movie', movie, night);
+    if (movie) { pxHide.add(tang); pxHide.add(zhan); }
+    // 塔羅、電腦、咖啡、紀念日
+    setOv('table-tarot', pairKind === 'tarot' && zhan.act?.key === 'pair', night);
+    setOv('screen-xp', here(tang) && tang.act.key === 'game' && tang.act.xp, night);
+    setOv('table-coffee', isWorkDay() && m >= 7 * 60 && m < 8 * 60 + 40, night);
+    const sp = specialDay();
+    setOv('decor-bday', !!sp && sp.name.includes('生日'), night);
+    setOv('decor-anniv', !!sp && !sp.name.includes('生日'), night);
+    // 前景：沙發、圍欄（人走到後面會被擋住）
+    setOv('sofa', true, night); setOv('fence', true, night);
+    stage.classList.toggle('px-night', night);
+  }
+  function pxFrame(a, sheet, col, row, flip) {
+    const S = SHEET[sheet];
+    const u = 4 * scale;
+    const st = a.spr.style;
+    const bg = `url("${PXI(sheet)}")`;
+    if (a.pxSheet !== sheet) { a.pxSheet = sheet; st.backgroundImage = bg; }
+    st.width = `${S.w * u}px`; st.height = `${S.h * u}px`;
+    st.backgroundSize = `${S.W * u}px ${S.H * u}px`;
+    st.backgroundPosition = `${-col * S.w * u}px ${-row * S.h * u}px`;
+    st.transform = `translate(-50%, -100%) scaleX(${flip ? -1 : 1})`;
+    return S.h * u;
+  }
+  function drawPx(a, now) {
+    const u = 4 * scale;
+    const walking = a.path.length > 0;
+    let h = 0, x = a.x, y = a.y, z = Math.round(a.y);
+    if (a === zhan || a === tang) {
+      if (zhan.act?.key !== 'pair' || tang.act?.key !== 'pair') pairKind = pairKind && (zhan.act?.key === 'pair' || tang.act?.key === 'pair') ? pairKind : null;
+      if (pxHide.has(a)) { a.el.style.visibility = 'hidden'; return; }
+      if (pairShowing()) {
+        if (a === tang) { a.el.style.visibility = 'hidden'; return; }
+        a.el.style.visibility = '';
+        x = (zhan.x + tang.x) / 2; y = Math.max(zhan.y, tang.y); z = Math.round(y);
+        h = pxFrame(a, 'pair', SHEET.pair.poses[pairKind], 0, false);
+        a.el.style.transform = `translate(${x * scale}px, ${y * scale}px)`;
+        a.el.style.zIndex = String(z);
+        a.bub.textContent = '';
+        if (now - lastHeart > 1.1) { lastHeart = now; popFx(x, y - 250, pairKind === 'tarot' ? pick(['🔮', '✨', '🃏']) : pairKind === 'poke' ? pick(['!', '👉', '…']) : pick(['💗', '💕', '♥'])); }
+        return;
+      }
+      a.el.style.visibility = '';
+      const both = pairKind && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang);
+      if (both && a === zhan && now - lastHeart > 1.2) { lastHeart = now; popFx((zhan.x + tang.x) / 2, Math.min(zhan.y, tang.y) - 260, pairKind === 'fight' ? pick(['💢', '!?', '✋']) : pick(['💗', '💕'])); }
+      const sheet = a.id;
+      if (walking) {
+        const row = SHEET[sheet].rows[`${isNight() ? 'pj-' : ''}walk-${a.back ? 'back' : 'front'}`];
+        const col = Math.floor(a.walkT * 0.75) % 8;
+        // 正面那排本來朝左下、背面那排本來朝右上
+        h = pxFrame(a, sheet, col, row, a.back ? a.face < 0 : a.face > 0);
+      } else {
+        const name = sprite(a, a.act?.sprite);
+        const col = SHEET[sheet].poses[name] ?? 0;
+        h = pxFrame(a, sheet, col, SHEET[sheet].rows.poses, false);
+        if (arrived(a) && a.act?.spot === 'sofa') z = 600;   // 坐在沙發上，不要被沙發擋住
+      }
+    } else {
+      // 兔兔
+      const row = SHEET.bunny.rows[a.id];
+      if (a.mode === 'hold' && a.lockedBy && !a.lockedBy.out) {
+        const o = a.lockedBy;
+        a.x = o.x; a.y = o.y; a.path = [];
+        h = pxFrame(a, 'bunny', 0, row, false);
+        a.el.style.transform = `translate(${(o.x + 6) * scale}px, ${(o.y - 100) * scale}px)`;
+        a.el.style.zIndex = String(Math.round(o.y) + 1);
+        a.bub.textContent = '';
+        return;
+      }
+      if (walking) {
+        const k = Math.floor(a.walkT * 0.6) % 4;
+        h = pxFrame(a, 'bunny', 1 + k, row, a.face > 0);
+        y -= HOP_Y[k] * 4;
+      } else h = pxFrame(a, 'bunny', 0, row, false);
+    }
+    a.el.style.transform = `translate(${x * scale}px, ${y * scale}px)`;
+    a.el.style.zIndex = String(z);
+    const bub = !walking && a.act?.bub ? a.act.bub : '';
+    if (a.bub.textContent !== bub) a.bub.textContent = bub;
+    a.bub.style.transform = `translate(-50%, ${-h + 8 * u - 18}px)`;
   }
   raf = requestAnimationFrame(frame);
 

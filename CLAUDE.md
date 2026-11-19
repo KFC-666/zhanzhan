@@ -9,6 +9,7 @@
 
 - `index.html`、`style.css`、`app.js`：整個 App（分頁：聊天、小房間、相簿、記帳、心情／行事曆、我們）。
 - `room.js`：2.5D 小房間（會讀班表、生理期、睡眠、紀念日、每天的小故事）。
+- `room-px/`：像素版小房間的圖（2026/11/20 加的，0.13.0）。`room.js` 用 `createRoom(root, api, 'px')` 開像素模式，跟 2.5D 共用同一套行為，小房間上方的切換鈕「2.5D／像素」換（`zh-petseg`）。圖的原檔、格子表和做法在 xiaotang-space 的 `files/pixel-room/` 和 `memory/projects/pixel-room.md`。小棠說兩個都做好再決定要不要換掉 2.5D。
 - `room3d.js`、`room3d/`：3D 小房間與模型。**2026/11/18 小棠決定拿掉 3D**，程式和模型保留給之後做小動畫、小遊戲；`app.js` 裡 `const ROOM_3D = false;` 改成 `true` 就恢復 3D／2.5D 切換。
 - `stickers/`：貼圖（`stickers.json` 清單＋ `.webp`）。小棠空間的 Claude 分頁也從這裡抓貼圖。
 - `skin/xiaotang-claude.user.js`：claude.ai 的主題腳本（Safari Userscripts、電腦 Tampermonkey、小棠空間的 Claude 分頁三處共用）。`skin/bg/` 是它的背景圖。
@@ -17,7 +18,7 @@
 
 ## 版本與更新
 
-- 改了 App 要同時改 `app.js` 的 `const VERSION` 和 `version.json`（目前 0.12.8）。App 打開或切回來時會比對 `version.json`，不同就自己重新載入，不用重裝。
+- 改了 App 要同時改 `app.js` 的 `const VERSION` 和 `version.json`（目前 0.13.0）。App 打開或切回來時會比對 `version.json`，不同就自己重新載入，不用重裝。
 - 主題腳本改了要把 header 的 `@version` 往上加（目前 0.8.2）。
   - 小棠空間每小時檢查一次 `raw.githubusercontent.com/.../skin/xiaotang-claude.user.js`，版本不同就換新並重新整理 Claude 分頁。
   - raw.githubusercontent.com 有大約 5 分鐘快取，剛推完可能還拿到舊的。
