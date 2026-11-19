@@ -18,7 +18,7 @@
 
 ## 版本與更新
 
-- 改了 App 要同時改 `app.js` 的 `const VERSION` 和 `version.json`（目前 0.13.0）。App 打開或切回來時會比對 `version.json`，不同就自己重新載入，不用重裝。
+- 改了 App 要同時改 `app.js` 的 `const VERSION` 和 `version.json`（目前 0.13.1）。App 打開或切回來時會比對 `version.json`，不同就自己重新載入，不用重裝。
 - 主題腳本改了要把 header 的 `@version` 往上加（目前 0.8.2）。
   - 小棠空間每小時檢查一次 `raw.githubusercontent.com/.../skin/xiaotang-claude.user.js`，版本不同就換新並重新整理 Claude 分頁。
   - raw.githubusercontent.com 有大約 5 分鐘快取，剛推完可能還拿到舊的。

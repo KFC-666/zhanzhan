@@ -30,7 +30,7 @@ const PEN = [[150, 690], [260, 700], [330, 660], [200, 650], [300, 730], [120, 7
 
 // ---------- 像素版（room-px/）----------
 // 房間圖 384×256，一格＝原圖 4 單位；邏輯座標照舊用 1536×1024。
-const PXV = '1';
+const PXV = '2';
 const PXI = (n) => `room-px/${n}.png?v=${PXV}`;
 // 像素房間的家具位置跟原圖差一點，這些點另外對過
 const SPOTS_PX = {
@@ -45,8 +45,12 @@ const SHEET = {
   zhan: { w: 52, h: 80, W: 416, H: 400, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4 },
     poses: { 'zhan-normal': 0, 'zhan-happy': 1, 'zhan-hungry': 2, 'zhan-home': 3, 'zhan-apron': 4, 'zhan-wolf': 5, 'zhan-wolfsleep': 6, 'zhan-welcome': 7 } },
   pair: { w: 80, h: 80, W: 320, H: 80, poses: { hug: 0, pat: 1, poke: 2, tarot: 3 } },
-  bunny: { w: 40, h: 40, W: 200, H: 80, rows: { cheng: 0, peng: 1 } },
+  bunny: { w: 40, h: 40, W: 280, H: 80, rows: { cheng: 0, peng: 1 }, extra: { 'cheng-happy': 5, 'cheng-nuzzle': 6, 'peng-eat1': 5, 'peng-eat2': 6 } },
+  // 人和兔兔畫在同一格（摸、餵、抱、換牧草）：用的時候把那隻兔兔藏起來
+  bunplay: { w: 80, h: 80, W: 800, H: 80, poses: { 'tang-pet': 0, 'tang-feed': 1, 'tang-hold': 2, 'tang-pet-pj': 3, 'tang-feed-pj': 4, 'tang-hold-pj': 5, 'zhan-tend': 6, 'zhan-hold': 7, 'zhan-tend-pj': 8, 'zhan-hold-pj': 9 } },
 };
+// 每個互動用哪隻兔兔
+const PLAY_BUNNY = { 'tang-pet': 'cheng', 'tang-feed': 'peng', 'tang-hold': 'cheng', 'zhan-tend': 'peng', 'zhan-hold': 'peng' };
 // 疊在房間上的圖：[x, y, 寬, 高]（384×256 的格子），z 用底邊換算成原圖 y
 const OV = {"bed-tang":[95,26,96,74],"bed-zhan":[95,26,99,74],"bed-both":[95,26,100,74],"bed-tangphone":[95,26,97,71],"bed-phoneboth":[95,26,97,74],"win-day":[63,26,33,44],"win-sunset":[63,26,33,44],"win-rainday":[63,26,33,44],"win-rainnight":[63,26,33,44],"sofa-movie":[149,78,89,68],"decor-anniv":[280,40,55,71],"decor-bday":[280,41,55,73],"table-coffee":[283,80,45,30],"table-tarot":[195,110,44,30],"screen-xp":[47,64,24,23],"sofa":[153,87,69,54],"fence":[2,149,110,55]};
 const OV_Z = { win: 1, 'screen-xp': 1, sofa: 560, fence: 812 };
@@ -157,7 +161,7 @@ export function createRoom(root, api, mode = '25d') {
       game: { spot: 'desk', sec: [60, 120], sprite: 'tang-game', bub: '🎮', text: ['小棠戴上耳機開始打遊戲', '小棠在電腦前跟朋友連線', '小棠打到一半輕聲罵了一句', '小棠很專心地在打王'], fx: { fun: 25, energy: -6 } },
       eat: { spot: 'table1', sec: [30, 60], sprite: 'tang-eat', bub: '🍜', text: ['小棠坐下來吃東西', '小棠吃得兩頰鼓鼓的', '小棠邊吃邊滑手機，被湛湛看了一眼'], fx: { hunger: -50 } },
       snack: { spot: 'fridge', sec: [15, 25], sprite: 'tang-eat', bub: '🍪', text: ['小棠打開冰箱偷拿零食', '小棠在冰箱前面猶豫要吃哪個'], fx: { hunger: -15, fun: 5 } },
-      bunny: { spot: 'penGate', sec: [30, 60], sprite: 'tang-happy', bub: '🐰', text: ['小棠蹲在兔兔區旁邊摸澄澄', '小棠拿牧草餵澎澎', '小棠在跟兔兔說話'], fx: { fun: 15, social: 8 } },
+      bunny: { spot: 'penGate', sec: [30, 60], sprite: 'tang-happy', bub: '🐰', text: ['小棠蹲在兔兔區旁邊摸澄澄', '小棠拿牧草餵澎澎', '小棠在跟兔兔說話', '小棠把澄澄抱起來親了一下'], fx: { fun: 15, social: 8 } },
       nap: { spot: 'bed', sec: [90, 160], sprite: 'tang-sleep', bub: '💤', text: ['小棠倒在床上補眠', '小棠抱著枕頭睡著了'], fx: { energy: 40 } },
       wander: { spot: null, sec: [6, 14], sprite: null, bub: '', text: ['小棠在房間裡晃來晃去', '小棠走到窗邊看了一下'], fx: { fun: 2 } },
       rest: { spot: 'sofa', sec: [60, 120], sprite: 'tang-phone', bub: '🩸', text: ['小棠肚子不舒服，抱著熱水袋縮在沙發上', '小棠窩在沙發休息，臉色有點白'], fx: { energy: 10 } },
@@ -388,6 +392,7 @@ export function createRoom(root, api, mode = '25d') {
     }
   }
   initial();
+  if (api.debug) api.debug({ start, zhan, tang, cheng, peng, place, SP });   // 只有測試頁會傳
 
   // ---------- 主迴圈 ----------
   let last = performance.now();
@@ -427,7 +432,24 @@ export function createRoom(root, api, mode = '25d') {
           if (b.mode === 'near' && !b.nearSet && arrived(a)) { walkTo(b, { x: a.x + (a.x > 700 ? -70 : 70), y: a.y + 18 }); b.speed = 200; b.nearSet = true; }
           continue;
         }
-        if (arrived(b) && chance(0.25)) {
+        if (PX && arrived(b)) {
+          // 跑到人腳邊撒嬌：到了就冒愛心
+          if (b.cuddle) {
+            b.cuddle = null; b.cuddleUntil = now + 8;
+            popFx(b.x, b.y - 90, pick(['💗', '♥', '💕']));
+            continue;
+          }
+          if (b.cuddleUntil > now) continue;
+          const sunday = api.tw().wd === 0;
+          const near = people.filter((a) => !a.out && arrived(a) && a.act && !pxHide.has(a) && !(a.act.spot === 'sofa' && a.act.key !== 'pair'));
+          if (near.length && chance(sunday ? 0.12 : 0.03)) {
+            const a = pick(near); const side = a.x > 700 ? -1 : 1;
+            walkTo(b, { x: a.x + side * 45, y: a.y + 10 }); b.speed = 200; b.cuddle = true; b.cuddleFlip = side < 0;
+            continue;
+          }
+          if (chance(0.06)) { b.idleAnim = true; b.idleUntil = now + 4 + Math.random() * 5; continue; }
+        }
+        if (arrived(b) && chance(0.25) && !(b.idleUntil > now)) {
           const free = !tang.out || !zhan.out ? chance(PX && api.tw().wd === 0 ? 0.7 : 0.25) : false;
           walkTo(b, free ? pick(FLOOR) : pick(PEN));
           b.speed = 160;
@@ -601,6 +623,21 @@ export function createRoom(root, api, mode = '25d') {
     const sp = specialDay();
     setOv('decor-bday', !!sp && sp.name.includes('生日'), night);
     setOv('decor-anniv', !!sp && !sp.name.includes('生日'), night);
+    // 跟兔兔玩：人和兔兔換成同一格的圖，那隻兔兔藏起來
+    for (const a of people) {
+      a.play = null;
+      if (pxHide.has(a) || !here(a)) continue;
+      const t = a.text || '';
+      let k = null;
+      const held = [cheng, peng].find((b) => b.mode === 'hold' && b.lockedBy === a);
+      if (held) k = a === tang ? (held === cheng ? 'tang-hold' : null) : (held === peng ? 'zhan-hold' : null);
+      else if (a.act.key === 'bunny') k = a === tang ? (/抱/.test(t) ? 'tang-hold' : /餵|牧草/.test(t) ? 'tang-feed' : 'tang-pet') : (/抱/.test(t) ? 'zhan-hold' : 'zhan-tend');
+      if (!k) continue;
+      const b = PLAY_BUNNY[k] === 'cheng' ? cheng : peng;
+      if (pxHide.has(b)) continue;   // 另一個人已經在跟這隻玩
+      a.play = isNight() ? `${k}-pj` : k;
+      pxHide.add(b);
+    }
     // 前景：沙發、圍欄（人走到後面會被擋住）
     setOv('sofa', true, night); setOv('fence', true, night);
     stage.classList.toggle('px-night', night);
@@ -639,7 +676,9 @@ export function createRoom(root, api, mode = '25d') {
       const both = pairKind && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang);
       if (both && a === zhan && now - lastHeart > 1.2) { lastHeart = now; popFx((zhan.x + tang.x) / 2, Math.min(zhan.y, tang.y) - 260, pairKind === 'fight' ? pick(['💢', '!?', '✋']) : pick(['💗', '💕'])); }
       const sheet = a.id;
-      if (walking) {
+      if (a.play && !walking) {
+        h = pxFrame(a, 'bunplay', SHEET.bunplay.poses[a.play], 0, false);
+      } else if (walking) {
         const row = SHEET[sheet].rows[`${isNight() ? 'pj-' : ''}walk-${a.back ? 'back' : 'front'}`];
         const col = Math.floor(a.walkT * 0.75) % 8;
         // 正面那排本來朝左下、背面那排本來朝右上
@@ -652,6 +691,8 @@ export function createRoom(root, api, mode = '25d') {
       }
     } else {
       // 兔兔
+      if (pxHide.has(a)) { a.el.style.visibility = 'hidden'; return; }
+      a.el.style.visibility = '';
       const row = SHEET.bunny.rows[a.id];
       if (a.mode === 'hold' && a.lockedBy && !a.lockedBy.out) {
         const o = a.lockedBy;
@@ -666,7 +707,13 @@ export function createRoom(root, api, mode = '25d') {
         const k = Math.floor(a.walkT * 0.6) % 4;
         h = pxFrame(a, 'bunny', 1 + k, row, a.face > 0);
         y -= HOP_Y[k] * 4;
-      } else h = pxFrame(a, 'bunny', 0, row, false);
+      } else {
+        // 撒嬌、瞇眼、嚼牧草
+        let col = 0;
+        if (a.cuddleUntil > now) col = a === cheng ? SHEET.bunny.extra['cheng-nuzzle'] : SHEET.bunny.extra[Math.floor(now * 2.5) % 2 ? 'peng-eat1' : 'peng-eat2'];
+        else if (a.idleAnim && a.idleUntil > now) col = a === cheng ? SHEET.bunny.extra['cheng-happy'] : SHEET.bunny.extra[Math.floor(now * 2.5) % 2 ? 'peng-eat1' : 'peng-eat2'];
+        h = pxFrame(a, 'bunny', col, row, a.cuddleUntil > now && a.cuddleFlip);
+      }
     }
     a.el.style.transform = `translate(${x * scale}px, ${y * scale}px)`;
     a.el.style.zIndex = String(z);
