@@ -30,7 +30,7 @@ const PEN = [[150, 690], [260, 700], [330, 660], [200, 650], [300, 730], [120, 7
 
 // ---------- 像素版（room-px/）----------
 // 房間圖 384×256，一格＝原圖 4 單位；邏輯座標照舊用 1536×1024。
-const PXV = '5';
+const PXV = '6';
 const PXI = (n) => `room-px/${n}.png?v=${PXV}`;
 // 像素房間的家具位置跟原圖差一點，這些點另外對過
 const SPOTS_PX = {
@@ -48,10 +48,18 @@ const SHEET = {
   pair: { w: 80, h: 80, W: 320, H: 160, poses: { hug: 0, pat: 1, poke: 2, tarot: 3 } },   // 第 2 列是睡衣版（hug／pat／poke）
   bunny: { w: 40, h: 40, W: 280, H: 80, rows: { cheng: 0, peng: 1 }, extra: { 'cheng-happy': 5, 'cheng-nuzzle': 6, 'peng-eat1': 5, 'peng-eat2': 6 } },
   // 人和兔兔畫在同一格（摸、餵、抱、換牧草）：用的時候把那隻兔兔藏起來
-  bunplay: { w: 80, h: 80, W: 800, H: 80, poses: { 'tang-pet': 0, 'tang-feed': 1, 'tang-hold': 2, 'tang-pet-pj': 3, 'tang-feed-pj': 4, 'tang-hold-pj': 5, 'zhan-tend': 6, 'zhan-hold': 7, 'zhan-tend-pj': 8, 'zhan-hold-pj': 9 } },
+  bunplay: { w: 80, h: 80, W: 1120, H: 80, poses: { 'tang-pet': 0, 'tang-feed': 1, 'tang-hold': 2, 'tang-pet-pj': 3, 'tang-feed-pj': 4, 'tang-hold-pj': 5, 'zhan-tend': 6, 'zhan-hold': 7, 'zhan-tend-pj': 8, 'zhan-hold-pj': 9, 'tang-sit-pet': 10, 'tang-sit-pet-pj': 11, 'zhan-sit-pet': 12, 'zhan-sit-pet-pj': 13 } },
 };
 // 每個互動用哪隻兔兔
-const PLAY_BUNNY = { 'tang-pet': 'cheng', 'tang-feed': 'peng', 'tang-hold': 'cheng', 'zhan-tend': 'peng', 'zhan-hold': 'peng' };
+const PLAY_BUNNY = { 'tang-pet': 'cheng', 'tang-feed': 'peng', 'tang-hold': 'cheng', 'zhan-tend': 'peng', 'zhan-hold': 'peng', 'tang-sit-pet': 'cheng', 'zhan-sit-pet': 'peng' };
+// 沙發前緣（原圖座標）：站在這條線前面的人和兔兔，要畫在沙發前面
+const SOFA_FRONT = [[612, 528], [712, 560], [884, 470]];
+function sofaFrontY(x) {
+  const [a, b, c] = SOFA_FRONT;
+  if (x < a[0] - 10 || x > c[0] + 10) return null;
+  const [p, q] = x <= b[0] ? [a, b] : [b, c];
+  return p[1] + (q[1] - p[1]) * (Math.min(Math.max(x, p[0]), q[0]) - p[0]) / (q[0] - p[0]);
+}
 // 疊在房間上的圖：[x, y, 寬, 高]（384×256 的格子），z 用底邊換算成原圖 y
 const OV = {"bed-tang":[95,26,96,74],"bed-zhan":[95,26,99,74],"bed-both":[95,26,100,74],"bed-tangphone":[95,26,97,71],"bed-phoneboth":[95,26,97,74],"win-day":[63,26,33,44],"win-sunset":[63,26,33,44],"win-rainday":[63,26,33,44],"win-rainnight":[63,26,33,44],"sofa-movie":[149,78,89,68],"decor-anniv":[280,40,55,71],"decor-bday":[280,41,55,73],"table-coffee":[283,80,45,30],"table-tarot":[195,110,44,30],"screen-xp":[47,64,24,23],"sofa":[153,87,69,54],"fence":[2,149,110,55]};
 const OV_Z = { win: 1, 'screen-xp': 1, sofa: 560, fence: 812 };
@@ -443,10 +451,13 @@ export function createRoom(root, api, mode = '25d') {
           }
           if (b.cuddleUntil > now) continue;
           const sunday = api.tw().wd === 0;
-          const near = people.filter((a) => !a.out && arrived(a) && a.act && !pxHide.has(a) && !(a.act.spot === 'sofa' && a.act.key !== 'pair'));
+          const onSofa = (a) => ['sofa', 'sofa2'].includes(a.act?.spot);
+          // 坐沙發的人只等「自己那隻」：小棠等澄澄、湛湛等澎澎
+          const near = people.filter((a) => !a.out && arrived(a) && a.act && !pxHide.has(a) && !['bed', 'bedSide', 'desk'].includes(a.act.spot) && (!onSofa(a) || (a === tang ? b === cheng : b === peng)));
           if (near.length && chance(sunday ? 0.12 : 0.03)) {
             const a = pick(near); const side = a.x > 700 ? -1 : 1;
-            walkTo(b, { x: a.x + side * 30, y: a.y + 8 }); b.speed = 200; b.cuddle = true; b.cuddleFlip = side < 0; b.cuddleWith = a;
+            const fy = onSofa(a) ? sofaFrontY(a.x) : null;
+            walkTo(b, fy != null ? { x: a.x + side * 18, y: fy + 26 } : { x: a.x + side * 30, y: a.y + 8 }); b.speed = 200; b.cuddle = true; b.cuddleFlip = side < 0; b.cuddleWith = a;
             continue;
           }
           if (chance(0.06)) { b.idleAnim = true; b.idleUntil = now + 4 + Math.random() * 5; continue; }
@@ -634,6 +645,12 @@ export function createRoom(root, api, mode = '25d') {
       const held = [cheng, peng].find((b) => b.mode === 'hold' && b.lockedBy === a && b.lockAct === a.act);
       if (held) k = a === tang ? (held === cheng ? 'tang-hold' : null) : (held === peng ? 'zhan-hold' : null);
       else if (a.act.key === 'bunny') k = a === tang ? (/抱/.test(t) ? 'tang-hold' : /餵|牧草/.test(t) ? 'tang-feed' : 'tang-pet') : (/抱/.test(t) ? 'zhan-hold' : 'zhan-tend');
+      // 坐在沙發上：撒嬌的兔兔跳到腿上給摸
+      const seated = (a === tang && a.act.spot === 'sofa' && ['phone', 'rest'].includes(a.act.key)) || (a === zhan && a.act.spot === 'sofa2' && ['read', 'watch'].includes(a.act.key));
+      if (!k && seated) {
+        const want = a === tang ? cheng : peng;
+        if (want.cuddleWith === a && want.cuddleUntil > performance.now() / 1000 && arrived(want)) k = a === tang ? 'tang-sit-pet' : 'zhan-sit-pet';
+      }
       // 兔兔跑來撒嬌：小棠蹲下來摸、湛湛把澎澎抱起來
       if (!k && !['sofa', 'sofa2', 'bed', 'bedSide', 'desk'].includes(a.act.spot) && !['pair', 'tidy', 'cook', 'soup', 'coffee', 'eat', 'game', 'wait'].includes(a.act.key)) {
         const c = [cheng, peng].find((b) => b.cuddleWith === a && b.cuddleUntil > performance.now() / 1000 && arrived(b));
@@ -685,6 +702,7 @@ export function createRoom(root, api, mode = '25d') {
       const sheet = a.id;
       if (a.play && !walking) {
         h = pxFrame(a, 'bunplay', SHEET.bunplay.poses[a.play], 0, false);
+        if (['sofa', 'sofa2'].includes(a.act?.spot)) z = 600;
       } else if (walking) {
         const row = SHEET[sheet].rows[`${isNight() ? 'pj-' : ''}walk-${a.back ? 'back' : 'front'}`];
         const col = Math.floor(a.walkT * 0.75) % 8;
@@ -731,6 +749,9 @@ export function createRoom(root, api, mode = '25d') {
         h = pxFrame(a, 'bunny', col, row, a.cuddleUntil > now && a.cuddleFlip);
       }
     }
+    // 在沙發前緣前面的，不要被沙發擋住
+    const fy = sofaFrontY(a.x);
+    if (fy != null && a.y >= fy - 6 && z < 570) z = 570 + Math.round(a.y - fy);
     a.el.style.transform = `translate(${x * scale}px, ${y * scale}px)`;
     a.el.style.zIndex = String(z);
     const bub = !walking && a.act?.bub ? a.act.bub : '';
