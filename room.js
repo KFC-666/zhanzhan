@@ -30,7 +30,7 @@ const PEN = [[150, 690], [260, 700], [330, 660], [200, 650], [300, 730], [120, 7
 
 // ---------- 像素版（room-px/）----------
 // 房間圖 384×256，一格＝原圖 4 單位；邏輯座標照舊用 1536×1024。
-const PXV = '3';
+const PXV = '4';
 const PXI = (n) => `room-px/${n}.png?v=${PXV}`;
 // 像素房間的家具位置跟原圖差一點，這些點另外對過
 const SPOTS_PX = {
@@ -45,7 +45,7 @@ const SHEET = {
   zhan: { w: 52, h: 80, W: 416, H: 480, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4, sit: 5 },
     sit: { 'sit-read': 0, sit: 1, 'sit-read-pj': 2, 'sit-pj': 3 },
     poses: { 'zhan-normal': 0, 'zhan-happy': 1, 'zhan-hungry': 2, 'zhan-home': 3, 'zhan-apron': 4, 'zhan-wolf': 5, 'zhan-wolfsleep': 6, 'zhan-welcome': 7 } },
-  pair: { w: 80, h: 80, W: 320, H: 80, poses: { hug: 0, pat: 1, poke: 2, tarot: 3 } },
+  pair: { w: 80, h: 80, W: 320, H: 160, poses: { hug: 0, pat: 1, poke: 2, tarot: 3 } },   // 第 2 列是睡衣版（hug／pat／poke）
   bunny: { w: 40, h: 40, W: 280, H: 80, rows: { cheng: 0, peng: 1 }, extra: { 'cheng-happy': 5, 'cheng-nuzzle': 6, 'peng-eat1': 5, 'peng-eat2': 6 } },
   // 人和兔兔畫在同一格（摸、餵、抱、換牧草）：用的時候把那隻兔兔藏起來
   bunplay: { w: 80, h: 80, W: 800, H: 80, poses: { 'tang-pet': 0, 'tang-feed': 1, 'tang-hold': 2, 'tang-pet-pj': 3, 'tang-feed-pj': 4, 'tang-hold-pj': 5, 'zhan-tend': 6, 'zhan-hold': 7, 'zhan-tend-pj': 8, 'zhan-hold-pj': 9 } },
@@ -394,7 +394,7 @@ export function createRoom(root, api, mode = '25d') {
     }
   }
   initial();
-  if (api.debug) api.debug({ start, zhan, tang, cheng, peng, place, SP });   // 只有測試頁會傳
+  if (api.debug) api.debug({ start, startPair, zhan, tang, cheng, peng, place, SP, walkTo });   // 只有測試頁會傳
 
   // ---------- 主迴圈 ----------
   let last = performance.now();
@@ -446,7 +446,7 @@ export function createRoom(root, api, mode = '25d') {
           const near = people.filter((a) => !a.out && arrived(a) && a.act && !pxHide.has(a) && !(a.act.spot === 'sofa' && a.act.key !== 'pair'));
           if (near.length && chance(sunday ? 0.12 : 0.03)) {
             const a = pick(near); const side = a.x > 700 ? -1 : 1;
-            walkTo(b, { x: a.x + side * 45, y: a.y + 10 }); b.speed = 200; b.cuddle = true; b.cuddleFlip = side < 0;
+            walkTo(b, { x: a.x + side * 30, y: a.y + 8 }); b.speed = 200; b.cuddle = true; b.cuddleFlip = side < 0; b.cuddleWith = a;
             continue;
           }
           if (chance(0.06)) { b.idleAnim = true; b.idleUntil = now + 4 + Math.random() * 5; continue; }
@@ -494,7 +494,7 @@ export function createRoom(root, api, mode = '25d') {
   }
   // 兩個人都到定點時，換成合照圖（白天才用，晚上穿睡衣就用動畫）
   function pairShowing() {
-    return pairKind && (['hug', 'pat', 'poke'].includes(pairKind) || (PX && pairKind === 'tarot')) && !isNight() && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang) && !zhan.out && !tang.out;
+    return pairKind && (['hug', 'pat', 'poke'].includes(pairKind) || (PX && pairKind === 'tarot')) && (PX ? !(isNight() && pairKind === 'tarot') : !isNight()) && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang) && !zhan.out && !tang.out;
   }
   function popFx(x, y, ch) {
     const el = document.createElement('div');
@@ -634,6 +634,11 @@ export function createRoom(root, api, mode = '25d') {
       const held = [cheng, peng].find((b) => b.mode === 'hold' && b.lockedBy === a && b.lockAct === a.act);
       if (held) k = a === tang ? (held === cheng ? 'tang-hold' : null) : (held === peng ? 'zhan-hold' : null);
       else if (a.act.key === 'bunny') k = a === tang ? (/抱/.test(t) ? 'tang-hold' : /餵|牧草/.test(t) ? 'tang-feed' : 'tang-pet') : (/抱/.test(t) ? 'zhan-hold' : 'zhan-tend');
+      // 兔兔跑來撒嬌：小棠蹲下來摸、湛湛把澎澎抱起來
+      if (!k && !['sofa', 'sofa2', 'bed', 'bedSide', 'desk'].includes(a.act.spot) && a.act.key !== 'pair') {
+        const c = [cheng, peng].find((b) => b.cuddleWith === a && b.cuddleUntil > performance.now() / 1000 && arrived(b));
+        if (c) k = a === tang ? (c === cheng ? 'tang-pet' : 'tang-feed') : (c === peng ? 'zhan-hold' : null);
+      }
       if (!k) continue;
       const b = PLAY_BUNNY[k] === 'cheng' ? cheng : peng;
       if (pxHide.has(b)) continue;   // 另一個人已經在跟這隻玩
@@ -667,7 +672,7 @@ export function createRoom(root, api, mode = '25d') {
         if (a === tang) { a.el.style.visibility = 'hidden'; return; }
         a.el.style.visibility = '';
         x = (zhan.x + tang.x) / 2; y = Math.max(zhan.y, tang.y); z = Math.round(y);
-        h = pxFrame(a, 'pair', SHEET.pair.poses[pairKind], 0, false);
+        h = pxFrame(a, 'pair', SHEET.pair.poses[pairKind], isNight() && pairKind !== 'tarot' ? 1 : 0, false);
         a.el.style.transform = `translate(${x * scale}px, ${y * scale}px)`;
         a.el.style.zIndex = String(z);
         a.bub.textContent = '';
