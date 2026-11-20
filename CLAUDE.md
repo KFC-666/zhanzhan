@@ -40,6 +40,7 @@
 
 - 聊天她覺得有點雞肋（GitHub Actions 回得慢），主要改用小棠空間裡的 Claude 分頁；湛湛 App 留著當後備和收推播，聊天功能沒有刪。
 - 3D、2.5D 小房間都不要了，只留像素版（見上面）。
+- **做 App 素材的圖不要留在相簿**（2026/11/20 小棠：「像素小人不要加進相簿裡」）。GPT 生圖工具會自動存進 zhanzhan-photos，做完要到 `photos/YYYY-MM/` 把那些圖和同名 `.json` 刪掉（確認 `albums.json` 沒引用）。
 - 主題腳本修過的坑：外框加 `backdrop-filter` 會讓裡面 `position: fixed` 的面板以外框為定位基準，造成側邊欄展開時一直閃。手機上 Claude Code 縮成一格的側邊欄用 ResizeObserver 加 `data-xt-rail-mini`，讓那一格透明。
 - 小棠會截圖或貼「畫面檢查」的結果（一行一層、★ 是有底色的層），照那個對準修。
 
