@@ -30,11 +30,11 @@ const PEN = [[150, 690], [260, 700], [330, 660], [200, 650], [300, 730], [120, 7
 
 // ---------- 像素版（room-px/）----------
 // 房間圖 384×256，一格＝原圖 4 單位；邏輯座標照舊用 1536×1024。
-const PXV = '2';
+const PXV = '3';
 const PXI = (n) => `room-px/${n}.png?v=${PXV}`;
 // 像素房間的家具位置跟原圖差一點，這些點另外對過
 const SPOTS_PX = {
-  bed: { x: 640, y: 392 }, bedSide: { x: 700, y: 384 }, desk: { x: 312, y: 462 }, sofa: { x: 740, y: 482 }, sofa2: { x: 962, y: 532 },
+  bed: { x: 640, y: 392 }, bedSide: { x: 700, y: 384 }, desk: { x: 312, y: 462 }, sofa: { x: 740, y: 482 }, sofa2: { x: 816, y: 508 },
   stove: { x: 900, y: 382 }, fridge: { x: 1062, y: 404 }, table1: { x: 1170, y: 470 }, table2: { x: 1290, y: 520 },
   door: { x: 1392, y: 612 }, doorIn: { x: 1312, y: 652 }, tarot: { x: 880, y: 642 }, penIn: { x: 230, y: 690 }, penGate: { x: 482, y: 702 },
 };
@@ -42,7 +42,8 @@ const SPOTS_PX = {
 const SHEET = {
   tang: { w: 64, h: 80, W: 512, H: 400, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4 },
     poses: { 'tang-normal': 0, 'tang-happy': 1, 'tang-eat': 2, 'tang-phone': 3, 'tang-game': 4, 'tang-bunny': 5, 'tang-sleep': 6 } },
-  zhan: { w: 52, h: 80, W: 416, H: 400, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4 },
+  zhan: { w: 52, h: 80, W: 416, H: 480, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4, sit: 5 },
+    sit: { 'sit-read': 0, sit: 1, 'sit-read-pj': 2, 'sit-pj': 3 },
     poses: { 'zhan-normal': 0, 'zhan-happy': 1, 'zhan-hungry': 2, 'zhan-home': 3, 'zhan-apron': 4, 'zhan-wolf': 5, 'zhan-wolfsleep': 6, 'zhan-welcome': 7 } },
   pair: { w: 80, h: 80, W: 320, H: 80, poses: { hug: 0, pat: 1, poke: 2, tarot: 3 } },
   bunny: { w: 40, h: 40, W: 280, H: 80, rows: { cheng: 0, peng: 1 }, extra: { 'cheng-happy': 5, 'cheng-nuzzle': 6, 'peng-eat1': 5, 'peng-eat2': 6 } },
@@ -244,6 +245,7 @@ export function createRoom(root, api, mode = '25d') {
     for (const b of list) {
       b.lockedBy = a;
       b.lockUntil = a.until;
+      b.lockAct = a.act;
       b.mode = /抱/.test(t) ? 'hold' : 'near';
       b.nearSet = false;
     }
@@ -428,7 +430,7 @@ export function createRoom(root, api, mode = '25d') {
       for (const b of [cheng, peng]) {
         if (b.lockedBy) {
           const a = b.lockedBy;
-          if (now > b.lockUntil || a.out || a.act == null) { b.lockedBy = null; b.mode = null; walkTo(b, pick(PEN)); b.speed = 160; continue; }
+          if (now > b.lockUntil || a.out || a.act == null || a.act !== b.lockAct) { b.lockedBy = null; b.mode = null; walkTo(b, pick(PEN)); b.speed = 160; continue; }
           if (b.mode === 'near' && !b.nearSet && arrived(a)) { walkTo(b, { x: a.x + (a.x > 700 ? -70 : 70), y: a.y + 18 }); b.speed = 200; b.nearSet = true; }
           continue;
         }
@@ -629,7 +631,7 @@ export function createRoom(root, api, mode = '25d') {
       if (pxHide.has(a) || !here(a)) continue;
       const t = a.text || '';
       let k = null;
-      const held = [cheng, peng].find((b) => b.mode === 'hold' && b.lockedBy === a);
+      const held = [cheng, peng].find((b) => b.mode === 'hold' && b.lockedBy === a && b.lockAct === a.act);
       if (held) k = a === tang ? (held === cheng ? 'tang-hold' : null) : (held === peng ? 'zhan-hold' : null);
       else if (a.act.key === 'bunny') k = a === tang ? (/抱/.test(t) ? 'tang-hold' : /餵|牧草/.test(t) ? 'tang-feed' : 'tang-pet') : (/抱/.test(t) ? 'zhan-hold' : 'zhan-tend');
       if (!k) continue;
@@ -683,11 +685,16 @@ export function createRoom(root, api, mode = '25d') {
         const col = Math.floor(a.walkT * 0.75) % 8;
         // 正面那排本來朝左下、背面那排本來朝右上
         h = pxFrame(a, sheet, col, row, a.back ? a.face < 0 : a.face > 0);
+      } else if (a === zhan && arrived(a) && a.act?.spot === 'sofa2' && ['read', 'watch'].includes(a.act.key)) {
+        // 湛湛坐在沙發右邊：看書或陪小棠
+        const k = `${a.act.key === 'read' ? 'sit-read' : 'sit'}${isNight() ? '-pj' : ''}`;
+        h = pxFrame(a, sheet, SHEET.zhan.sit[k], SHEET.zhan.rows.sit, false);
+        z = 600;
       } else {
         const name = sprite(a, a.act?.sprite);
         const col = SHEET[sheet].poses[name] ?? 0;
         h = pxFrame(a, sheet, col, SHEET[sheet].rows.poses, false);
-        if (arrived(a) && a.act?.spot === 'sofa') z = 600;   // 坐在沙發上，不要被沙發擋住
+        if (arrived(a) && ['sofa', 'sofa2'].includes(a.act?.spot)) z = 600;   // 坐在沙發上，不要被沙發擋住
       }
     } else {
       // 兔兔

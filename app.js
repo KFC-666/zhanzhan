@@ -1,6 +1,6 @@
 
-const VERSION = '0.13.1';
-import { createRoom } from './room.js?v=0.13.1';
+const VERSION = '0.13.2';
+import { createRoom } from './room.js?v=0.13.2';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -767,12 +767,14 @@ let roomInst = null, roomPxInst = null;
 // 3D 的程式（room3d.js）和模型（room3d/）都還留著，之後做小動畫、小遊戲可以用；
 // 要再打開 3D，把下面的 ROOM_3D 改成 true 就會恢復 3D／2.5D 切換。
 const ROOM_3D = false;
-// 2026/11/20 加了像素版小房間（room-px/），小棠要跟 2.5D 比較，用上面的切換鈕換
-let petSeg = LS.get('zh-petseg', 'room');
-if (!['room', 'px', ...(ROOM_3D ? ['3d'] : [])].includes(petSeg)) petSeg = 'room';
+// 2026/11/20 小房間改成像素版（room-px/）。小棠看過後說「有像素的話，就可以不用 2.5D 了」，
+// 2.5D 的程式和圖都還在；要再打開，把 ROOM_25D 改成 true，上面就會出現「2.5D／像素」切換。
+const ROOM_25D = false;
+let petSeg = LS.get('zh-petseg', 'px');
+if (!['px', ...(ROOM_25D ? ['room'] : []), ...(ROOM_3D ? ['3d'] : [])].includes(petSeg)) petSeg = 'px';
 function renderPetSeg() {
   const b = (k, l) => `<button data-pseg="${k}" class="${petSeg === k ? 'on' : ''}">${l}</button>`;
-  $('#pet-seg').innerHTML = `<div class="seg">${ROOM_3D ? b('3d', '3D') : ''}${b('room', '2.5D')}${b('px', '像素')}</div>`;
+  $('#pet-seg').innerHTML = ROOM_25D || ROOM_3D ? `<div class="seg">${ROOM_3D ? b('3d', '3D') : ''}${ROOM_25D ? b('room', '2.5D') : ''}${b('px', '像素')}</div>` : '';
 }
 let room3dInst = null, room3dLoading = false;
 function roomApi() {
