@@ -715,7 +715,9 @@ export function createRoom(root, api, mode = '25d') {
       } else if (a === zhan && arrived(a) && a.act?.spot === 'sofa2' && ['read', 'watch'].includes(a.act.key)) {
         // 湛湛坐在沙發右邊：看書或陪小棠
         const k = `${a.act.key === 'read' ? 'sit-read' : 'sit'}${isNight() ? '-pj' : ''}`;
-        h = pxFrame(a, sheet, SHEET.zhan.sit[k], SHEET.zhan.rows.sit, false);
+        // 陪小棠的坐姿本來看向畫面右邊：小棠在左邊（像在書桌打電動）就翻過來看她
+        const lookLeft = a.act.key === 'watch' && !tang.out && tang.x < a.x;
+        h = pxFrame(a, sheet, SHEET.zhan.sit[k], SHEET.zhan.rows.sit, lookLeft);
         z = 600;
       } else {
         const name = sprite(a, a.act?.sprite);
