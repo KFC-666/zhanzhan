@@ -1,6 +1,6 @@
 
-const VERSION = '0.13.3';
-import { createRoom } from './room.js?v=0.13.3';
+const VERSION = '0.13.4';
+import { createRoom } from './room.js?v=0.13.4';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],

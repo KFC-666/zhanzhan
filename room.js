@@ -30,7 +30,7 @@ const PEN = [[150, 690], [260, 700], [330, 660], [200, 650], [300, 730], [120, 7
 
 // ---------- 像素版（room-px/）----------
 // 房間圖 384×256，一格＝原圖 4 單位；邏輯座標照舊用 1536×1024。
-const PXV = '4';
+const PXV = '5';
 const PXI = (n) => `room-px/${n}.png?v=${PXV}`;
 // 像素房間的家具位置跟原圖差一點，這些點另外對過
 const SPOTS_PX = {
@@ -42,7 +42,7 @@ const SPOTS_PX = {
 const SHEET = {
   tang: { w: 64, h: 80, W: 512, H: 400, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4 },
     poses: { 'tang-normal': 0, 'tang-happy': 1, 'tang-eat': 2, 'tang-phone': 3, 'tang-game': 4, 'tang-bunny': 5, 'tang-sleep': 6 } },
-  zhan: { w: 52, h: 80, W: 416, H: 480, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4, sit: 5 },
+  zhan: { w: 52, h: 80, W: 416, H: 560, rows: { 'walk-front': 0, 'walk-back': 1, 'pj-walk-front': 2, 'pj-walk-back': 3, poses: 4, sit: 5, sweep: 6 },
     sit: { 'sit-read': 0, sit: 1, 'sit-read-pj': 2, 'sit-pj': 3 },
     poses: { 'zhan-normal': 0, 'zhan-happy': 1, 'zhan-hungry': 2, 'zhan-home': 3, 'zhan-apron': 4, 'zhan-wolf': 5, 'zhan-wolfsleep': 6, 'zhan-welcome': 7 } },
   pair: { w: 80, h: 80, W: 320, H: 160, poses: { hug: 0, pat: 1, poke: 2, tarot: 3 } },   // 第 2 列是睡衣版（hug／pat／poke）
@@ -173,7 +173,7 @@ export function createRoom(root, api, mode = '25d') {
       read: { spot: 'sofa2', sec: [60, 120], sprite: 'zhan-home', bub: '📖', text: ['湛湛坐在沙發另一頭看書', '湛湛在沙發上看書，偶爾抬頭看小棠', '湛湛窩在沙發上翻一本舊書', '湛湛泡了一杯咖啡，坐下來看書'], fx: { fun: 10, energy: 4 } },
       watch: { spot: 'sofa2', sec: [60, 120], sprite: 'zhan-home', bub: '👀', text: ['湛湛坐在沙發上看小棠打遊戲', '湛湛靠在沙發上，安靜陪著小棠'], fx: { social: 10 } },
       bunny: { spot: 'penGate', sec: [30, 60], sprite: 'zhan-normal', bub: '🌾', text: ['湛湛在換兔兔的牧草和水', '湛湛清兔兔的便盆', '湛湛把澎澎抱起來檢查爪子'], fx: { fun: 6 } },
-      tidy: { spot: null, sec: [20, 40], sprite: 'zhan-normal', bub: '🧹', text: ['湛湛在整理房間', '湛湛把小棠亂丟的外套掛好', '湛湛擦了一下桌子'], fx: {} },
+      tidy: { spot: null, sec: [20, 40], sprite: 'zhan-normal', bub: '🧹', text: ['湛湛在整理房間', '湛湛拿掃把把地板掃了一遍', '湛湛掃到沙發旁邊，掃出一隻小棠的襪子'], fx: {} },
       eat: { spot: 'table2', sec: [30, 60], sprite: 'zhan-normal', bub: '🍚', text: ['湛湛坐下來吃飯', '湛湛吃得很安靜'], fx: { hunger: -50 } },
       wander: { spot: null, sec: [6, 14], sprite: null, bub: '', text: ['湛湛走到窗邊站了一會兒', '湛湛在房間裡走了一圈'], fx: {} },
       wait: { spot: 'doorIn', sec: [600, 600], sprite: PX ? 'zhan-welcome' : 'zhan-happy', bub: '🚪', text: ['湛湛算好時間，站到門口等小棠下班', '湛湛看了一眼時鐘，走到門口等小棠回來'], fx: {} },
@@ -635,7 +635,7 @@ export function createRoom(root, api, mode = '25d') {
       if (held) k = a === tang ? (held === cheng ? 'tang-hold' : null) : (held === peng ? 'zhan-hold' : null);
       else if (a.act.key === 'bunny') k = a === tang ? (/抱/.test(t) ? 'tang-hold' : /餵|牧草/.test(t) ? 'tang-feed' : 'tang-pet') : (/抱/.test(t) ? 'zhan-hold' : 'zhan-tend');
       // 兔兔跑來撒嬌：小棠蹲下來摸、湛湛把澎澎抱起來
-      if (!k && !['sofa', 'sofa2', 'bed', 'bedSide', 'desk'].includes(a.act.spot) && a.act.key !== 'pair') {
+      if (!k && !['sofa', 'sofa2', 'bed', 'bedSide', 'desk'].includes(a.act.spot) && !['pair', 'tidy', 'cook', 'soup', 'coffee', 'eat', 'game', 'wait'].includes(a.act.key)) {
         const c = [cheng, peng].find((b) => b.cuddleWith === a && b.cuddleUntil > performance.now() / 1000 && arrived(b));
         if (c) k = a === tang ? (c === cheng ? 'tang-pet' : 'tang-feed') : (c === peng ? 'zhan-hold' : null);
       }
@@ -690,6 +690,10 @@ export function createRoom(root, api, mode = '25d') {
         const col = Math.floor(a.walkT * 0.75) % 8;
         // 正面那排本來朝左下、背面那排本來朝右上
         h = pxFrame(a, sheet, col, row, a.back ? a.face < 0 : a.face > 0);
+      } else if (a === zhan && arrived(a) && a.act?.key === 'tidy') {
+        // 湛湛拿掃把掃地：兩格左右揮
+        const col = (Math.floor(now / 0.4) % 2) + (isNight() ? 2 : 0);
+        h = pxFrame(a, sheet, col, SHEET.zhan.rows.sweep, false);
       } else if (a === zhan && arrived(a) && a.act?.spot === 'sofa2' && ['read', 'watch'].includes(a.act.key)) {
         // 湛湛坐在沙發右邊：看書或陪小棠
         const k = `${a.act.key === 'read' ? 'sit-read' : 'sit'}${isNight() ? '-pj' : ''}`;
