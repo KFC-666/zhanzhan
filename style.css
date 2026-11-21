@@ -507,3 +507,20 @@ body.kb .tabbar { display: none; }
 .town-bag-it span { grid-row: span 2; font-size: 20px; }
 .town-bag-it small { color: #a0788a; }
 .town-bag-close { margin-top: 10px; width: 100%; background: #fbe3ec; border: 2px solid #c46b8c; border-radius: 8px; padding: 6px; color: #7a3d55; }
+
+.town-fade { position: absolute; inset: 0; background: #1a1328; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 4500; }
+.town-fade.on { opacity: 1; }
+.town.swipe::after { content: '💳'; position: absolute; left: 50%; top: 35%; font-size: 46px; z-index: 4800; animation: townSwipe .9s ease-in-out infinite; }
+@keyframes townSwipe { 0% { transform: translate(-90%, 0) rotate(-12deg); } 50% { transform: translate(-10%, 6px) rotate(8deg); } 100% { transform: translate(-90%, 0) rotate(-12deg); } }
+.town-receipt { position: absolute; inset: 0; z-index: 5000; background: rgba(30, 20, 40, .45); display: flex; align-items: center; justify-content: center; }
+.town-receipt[hidden] { display: none; }
+.rc-in { width: 72%; background: #fffdf8; border: 3px dashed #c9a9b6; border-radius: 6px; padding: 12px 14px; font-family: ui-monospace, Menlo, monospace; color: #4a2a38; animation: rcIn .5s ease-out; }
+@keyframes rcIn { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.rc-in h4 { margin: 2px 0; text-align: center; font-size: 15px; letter-spacing: .1em; }
+.rc-in small { display: block; text-align: center; color: #a0788a; margin-bottom: 8px; }
+.rc-card { text-align: center; font-size: 26px; }
+.rc-l { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 2px 0; }
+.rc-t { border-top: 1px dashed #c9a9b6; margin-top: 6px; padding-top: 6px; font-weight: 700; }
+.rc-sign { margin-top: 8px; font-size: 12px; color: #7a5a68; }
+.rc-sign b { font-family: 'Brush Script MT', cursive; font-size: 17px; color: #2a2a55; }
+.rc-in button { margin-top: 10px; width: 100%; background: #fbe3ec; border: 2px solid #c46b8c; border-radius: 8px; padding: 6px; color: #7a3d55; font-family: inherit; }
