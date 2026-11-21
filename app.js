@@ -1,6 +1,6 @@
 
-const VERSION = '0.14.1';
-import { createRoom } from './room.js?v=0.14.1';
+const VERSION = '0.15.0';
+import { createRoom } from './room.js?v=0.15.0';
 // 小湛的圖（GPT 畫的，放在 pet/）
 const PET_IMG = {
   shirt: ['normal', 'happy', 'hungry', 'sad'],
@@ -208,7 +208,7 @@ function renderTopbar() {
   }
 }
 function switchTab(tab) {
-  if (tab !== 'pet') { if (roomInst) roomInst.pause(); if (roomPxInst) roomPxInst.pause(); if (room3dInst) room3dInst.pause(); }
+  if (tab !== 'pet') { if (roomInst) roomInst.pause(); if (roomPxInst) roomPxInst.pause(); if (room3dInst) room3dInst.pause(); if (townInst) townInst.pause(); }
   currentTab = tab;
   LS.set('zh-tab', tab);
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${tab}`));
@@ -762,7 +762,7 @@ function petOutfit(night, asleep) {
   return PET_IMG[o] ? o : 'shirt';
 }
 // ---- 小房間 ----
-let roomInst = null, roomPxInst = null;
+let roomInst = null, roomPxInst = null, townInst = null;
 // 小房間只留 2.5D（2026/11/18 小棠決定拿掉 3D）。
 // 3D 的程式（room3d.js）和模型（room3d/）都還留著，之後做小動畫、小遊戲可以用；
 // 要再打開 3D，把下面的 ROOM_3D 改成 true 就會恢復 3D／2.5D 切換。
@@ -770,11 +770,28 @@ const ROOM_3D = false;
 // 2026/11/20 小房間改成像素版（room-px/）。小棠看過後說「有像素的話，就可以不用 2.5D 了」，
 // 2.5D 的程式和圖都還在；要再打開，把 ROOM_25D 改成 true，上面就會出現「2.5D／像素」切換。
 const ROOM_25D = false;
+// 2026/11/21 加了小鎮（town.js）：小棠自己走來走去逛的地方，跟小房間用上面的切換鈕換
 let petSeg = LS.get('zh-petseg', 'px');
-if (!['px', ...(ROOM_25D ? ['room'] : []), ...(ROOM_3D ? ['3d'] : [])].includes(petSeg)) petSeg = 'px';
+if (!['px', 'town', ...(ROOM_25D ? ['room'] : []), ...(ROOM_3D ? ['3d'] : [])].includes(petSeg)) petSeg = 'px';
 function renderPetSeg() {
   const b = (k, l) => `<button data-pseg="${k}" class="${petSeg === k ? 'on' : ''}">${l}</button>`;
-  $('#pet-seg').innerHTML = ROOM_25D || ROOM_3D ? `<div class="seg">${ROOM_3D ? b('3d', '3D') : ''}${ROOM_25D ? b('room', '2.5D') : ''}${b('px', '像素')}</div>` : '';
+  $('#pet-seg').innerHTML = `<div class="seg">${ROOM_3D ? b('3d', '3D') : ''}${ROOM_25D ? b('room', '2.5D') : ''}${b('px', ROOM_25D ? '像素' : '小房間')}${b('town', '小鎮')}</div>`;
+}
+let townLoading = false;
+async function showTown() {
+  for (const id of ['#pet-root', '#room-root', '#roompx-root', '#room3d-root']) $(id).style.display = 'none';
+  for (const r of [roomInst, roomPxInst, room3dInst]) if (r) r.pause();
+  $('#town-root').style.display = '';
+  if (townInst) { townInst.resume(); return; }
+  if (townLoading) return;
+  townLoading = true;
+  try {
+    const { createTown } = await import(`./town.js?v=${VERSION}`);
+    townInst = createTown($('#town-root'), { tw, say: toast, goHome: () => { petSeg = 'px'; LS.set('zh-petseg', petSeg); renderPet(true); } });
+    if (currentTab !== 'pet' || petSeg !== 'town') townInst.pause();
+  } catch (e) {
+    $('#town-root').innerHTML = `<p class="muted" style="text-align:center;padding:40px 0">小鎮打不開：${esc(String(e.message || e))}</p>`;
+  } finally { townLoading = false; }
 }
 let room3dInst = null, room3dLoading = false;
 function roomApi() {
@@ -818,6 +835,8 @@ $('#pet-seg').addEventListener('click', (e) => {
   renderPet(true);
 });
 function showRoom(px) {
+  $('#town-root').style.display = 'none';
+  if (townInst) townInst.pause();
   $('#pet-root').style.display = 'none';
   $('#room3d-root').style.display = 'none';
   if (room3dInst) room3dInst.pause();
@@ -836,6 +855,7 @@ function showRoom(px) {
 function renderPet(first) {
   if (currentTab !== 'pet') return;
   renderPetSeg();
+  if (petSeg === 'town') { showTown(); return; }
   if (petSeg === 'room' || petSeg === 'px') { showRoom(petSeg === 'px'); return; }
   if (petSeg === '3d') { show3D(); return; }
   if (roomInst) roomInst.pause();
