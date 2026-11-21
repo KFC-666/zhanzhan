@@ -30,7 +30,7 @@ const PEN = [[150, 690], [260, 700], [330, 660], [200, 650], [300, 730], [120, 7
 
 // ---------- 像素版（room-px/）----------
 // 房間圖 384×256，一格＝原圖 4 單位；邏輯座標照舊用 1536×1024。
-const PXV = '8';
+const PXV = '9';
 const PXI = (n) => `room-px/${n}.png?v=${PXV}`;
 // 像素房間的家具位置跟原圖差一點，這些點另外對過
 const SPOTS_PX = {
@@ -52,7 +52,7 @@ const SHEET = {
 };
 // 每個互動用哪隻兔兔
 // 2026/11/21 更多動畫：各動作的第二格、睡衣版、打瞌睡、伸懶腰、合照、兔兔理毛／吃草／睡覺
-SHEET.more = { w: 80, h: 80, W: 2080, H: 80, poses: {"tang-phone2":0,"tang-game2":1,"tang-eat2":2,"tang-phone-pj":3,"tang-phone2-pj":4,"tang-game-pj":5,"tang-game2-pj":6,"zhan-apron2":7,"zhan-sit-read2":8,"zhan-sit-read2-pj":9,"tang-doze":10,"tang-doze2":11,"tang-doze-pj":12,"tang-doze2-pj":13,"tang-stretch":14,"tang-stretch2":15,"pair-helmet":16,"pair-hairdry":17,"pair-hairdry2":18,"pair-taste":19,"bun-groom":20,"bun-groom2":21,"cheng-eat1":22,"cheng-eat2":23,"cheng-sleep":24,"peng-sleep":25} };
+SHEET.more = { w: 80, h: 80, W: 2400, H: 80, poses: {"pair-fight":26,"pair-fight2":27,"pair-fight-pj":28,"pair-fight2-pj":29,"tang-phone2":0,"tang-game2":1,"tang-eat2":2,"tang-phone-pj":3,"tang-phone2-pj":4,"tang-game-pj":5,"tang-game2-pj":6,"zhan-apron2":7,"zhan-sit-read2":8,"zhan-sit-read2-pj":9,"tang-doze":10,"tang-doze2":11,"tang-doze-pj":12,"tang-doze2-pj":13,"tang-stretch":14,"tang-stretch2":15,"pair-helmet":16,"pair-hairdry":17,"pair-hairdry2":18,"pair-taste":19,"bun-groom":20,"bun-groom2":21,"cheng-eat1":22,"cheng-eat2":23,"cheng-sleep":24,"peng-sleep":25} };
 // 站著／坐著不動時的小循環：[白天, 晚上]，每格約 0.7 秒
 const LOOPS = {
   'tang-phone': [['tang-phone', 'tang-phone', 'tang-phone2'], ['tang-phone-pj', 'tang-phone-pj', 'tang-phone2-pj']],
@@ -62,7 +62,8 @@ const LOOPS = {
   'tang-stretch': [['tang-stretch', 'tang-stretch2'], ['tang-stretch', 'tang-stretch2']],
   'zhan-apron': [['zhan-apron', 'zhan-apron2'], ['zhan-apron', 'zhan-apron2']],
 };
-const PAIR_MORE = { hairdry: ['pair-hairdry', 'pair-hairdry2'], taste: ['pair-taste'], helmet: ['pair-helmet'] };
+// 白天、晚上用不同圖的，寫成 { d: [...], n: [...] }
+const PAIR_MORE = { hairdry: ['pair-hairdry', 'pair-hairdry2'], taste: ['pair-taste'], helmet: ['pair-helmet'], fight: { d: ['pair-fight', 'pair-fight2'], n: ['pair-fight-pj', 'pair-fight2-pj'] } };
 const PLAY_BUNNY = { 'tang-pet': 'cheng', 'tang-feed': 'peng', 'tang-hold': 'cheng', 'zhan-tend': 'peng', 'zhan-hold': 'peng', 'tang-sit-pet': 'cheng', 'zhan-sit-pet': 'peng' };
 // 沙發前緣（原圖座標）：站在這條線前面的人和兔兔，要畫在沙發前面
 const SOFA_FRONT = [[612, 528], [712, 560], [884, 470]];
@@ -539,7 +540,7 @@ export function createRoom(root, api, mode = '25d') {
   }
   // 兩個人都到定點時，換成合照圖（白天才用，晚上穿睡衣就用動畫）
   function pairShowing() {
-    return pairKind && (PX ? ['hug', 'pat', 'poke', 'tarot', 'hairdry', 'taste', 'helmet'].includes(pairKind) && !(isNight() && pairKind === 'tarot') : ['hug', 'pat', 'poke'].includes(pairKind) && !isNight()) && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang) && !zhan.out && !tang.out;
+    return pairKind && (PX ? ['hug', 'pat', 'poke', 'tarot', 'hairdry', 'taste', 'helmet', 'fight'].includes(pairKind) && !(isNight() && pairKind === 'tarot') : ['hug', 'pat', 'poke'].includes(pairKind) && !isNight()) && zhan.act?.key === 'pair' && tang.act?.key === 'pair' && arrived(zhan) && arrived(tang) && !zhan.out && !tang.out;
   }
   function popFx(x, y, ch) {
     const el = document.createElement('div');
@@ -727,12 +728,12 @@ export function createRoom(root, api, mode = '25d') {
         if (a === tang) { a.el.style.visibility = 'hidden'; return; }
         a.el.style.visibility = '';
         x = (zhan.x + tang.x) / 2; y = Math.max(zhan.y, tang.y); z = Math.round(y);
-        if (PAIR_MORE[pairKind]) { const fr = PAIR_MORE[pairKind]; h = pxFrame(a, 'more', SHEET.more.poses[fr[Math.floor(now / 0.45) % fr.length]], 0, false); }
+        if (PAIR_MORE[pairKind]) { const pm = PAIR_MORE[pairKind]; const fr = Array.isArray(pm) ? pm : pm[isNight() ? 'n' : 'd']; h = pxFrame(a, 'more', SHEET.more.poses[fr[Math.floor(now / (pairKind === 'fight' ? 0.6 : 0.45)) % fr.length]], 0, false); }
         else h = pxFrame(a, 'pair', SHEET.pair.poses[pairKind], isNight() && pairKind !== 'tarot' ? 1 : 0, false);
         a.el.style.transform = `translate(${x * scale}px, ${y * scale}px)`;
         a.el.style.zIndex = String(z);
         a.bub.textContent = '';
-        if (now - lastHeart > 1.1) { lastHeart = now; popFx(x, y - 250, pairKind === 'tarot' ? pick(['🔮', '✨', '🃏']) : pairKind === 'hairdry' ? pick(['💨', '✨', '💗']) : pairKind === 'taste' ? pick(['😋', '♥', '✨']) : pairKind === 'helmet' ? pick(['🛵', '💗', '路上小心']) : pairKind === 'poke' ? pick(['!', '👉', '…']) : pick(['💗', '💕', '♥'])); }
+        if (now - lastHeart > 1.1) { lastHeart = now; popFx(x, y - 250, pairKind === 'tarot' ? pick(['🔮', '✨', '🃏']) : pairKind === 'hairdry' ? pick(['💨', '✨', '💗']) : pairKind === 'taste' ? pick(['😋', '♥', '✨']) : pairKind === 'helmet' ? pick(['🛵', '💗', '路上小心']) : pairKind === 'fight' ? pick(['💢', '!?', '抓到了', '哈哈']) : pairKind === 'poke' ? pick(['!', '👉', '…']) : pick(['💗', '💕', '♥'])); }
         return;
       }
       a.el.style.visibility = '';
